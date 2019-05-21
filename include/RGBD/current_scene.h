@@ -140,11 +140,6 @@ struct CurrentScene
     /// out: vPlanes.type
     void classifyPlanes();
 
-    //// Classifies planes according to the orientation and position in floor reference (2f) when clouds are in Absolute reference (Z upwards, e.g. Gazebo)
-    //// Types: 0 = floor, 1 = horizontal, 2 = vertical/lateral, 3 = vertical/frontal. 5 = other/obstacle
-    /// out: vPlanes.type
-    void classifyPlanesAbs();
-
     //// Get Manhattan directions of the scene using normals: X sideways, Y vertical, Z front-back
     /// out: eigDx (3x3 Matrix with the directions X-Y-Z)
     void getManhattanDirectionsFromNormals();

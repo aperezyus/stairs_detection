@@ -44,7 +44,6 @@ void Plane::getCentroid2Floor(Eigen::Affine3d c2f)
 	centroid2f.x = static_cast<float> (c2f.matrix() (0, 0) * centroid.x + c2f.matrix() (0, 1) * centroid.y + c2f.matrix() (0, 2) * centroid.z + c2f.matrix() (0, 3));
 	centroid2f.y = static_cast<float> (c2f.matrix() (1, 0) * centroid.x + c2f.matrix() (1, 1) * centroid.y + c2f.matrix() (1, 2) * centroid.z + c2f.matrix() (1, 3));
 	centroid2f.z = static_cast<float> (c2f.matrix() (2, 0) * centroid.x + c2f.matrix() (2, 1) * centroid.y + c2f.matrix() (2, 2) * centroid.z + c2f.matrix() (2, 3));
-
 }
 
 void Plane::getCloud2Floor(Eigen::Affine3d c2f)

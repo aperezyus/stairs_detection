@@ -205,8 +205,8 @@
   {
           for (int Q=0; Q<vClouds.size(); Q++)
           {
-                        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_to_draw (new pcl::PointCloud<pcl::PointXYZ>);
-                        pcl::transformPointCloud(*vClouds[Q],*cloud_to_draw,pose);
+                  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_to_draw (new pcl::PointCloud<pcl::PointXYZ>);
+                  pcl::transformPointCloud(*vClouds[Q],*cloud_to_draw,pose);
 
                   int random_r = rand() % 255;
                   int random_g = rand() % 255;
@@ -245,46 +245,56 @@
 		}
 	}		
 
+    void Viewer::getColorType(double &r, double &g, double &b, int type)
+    {
+        switch (type){
+            case 0:
+                r = 0.0; g = 255.0; b = 0.0;
+                break;
+            case 1:
+                r = 0.0; g = 0.0; b = 255.0;
+                break;
+            case 2:
+                r = 255.0; g = 255.0; b = 0.0;
+                break;
+            case 3:
+                r = 255.0; g = 255.0; b = 0.0;
+                break;
+            case 4:
+                r = 255.0; g = 255.0; b = 0.0;
+                break;
+            case 5:
+                r = 255.0; g = 0.0; b = 0.0;
+                break;
+        }
+    }
+
 
 	void Viewer::drawPlaneTypes (std::vector<Plane> vPlanes)
 	{
 		for (int Q=0; Q<vPlanes.size(); Q++)
 		{
-			// std::cout << vPlanes[Q].type << std::endl;
-			if (vPlanes[Q].type == 0)
-				this->drawCloud(vPlanes[Q].cloud, 0.0f, 255.0f, 0.0f, Q);
-                        else if (vPlanes[Q].type == 1)
-                                this->drawCloud(vPlanes[Q].cloud, 0.0f, 0.0f, 255.0f, Q);
-                        else if (vPlanes[Q].type == 2)
-                                this->drawCloud(vPlanes[Q].cloud, 255.0f, 255.0f, 0.0f, Q);
-                        else if (vPlanes[Q].type == 3)
-                                this->drawCloud(vPlanes[Q].cloud, 255.0f, 255.0f, 0.0f, Q);
-                        else if (vPlanes[Q].type == 4)
-                                this->drawCloud(vPlanes[Q].cloud, 255.0f, 255.0f, 0.0f, Q);
-                        else if (vPlanes[Q].type == 5)
-                                this->drawCloud(vPlanes[Q].cloud, 255.0f, 0.0f, 0.0f, Q);
+            double r,g,b;
+            getColorType(r,g,b,vPlanes[Q].type);
+            this->drawCloud(vPlanes[Q].cloud, r, g, b, Q);
+
 		}
 	}	
 	
+
+
 	void Viewer::drawPlaneTypesContour (std::vector<Plane> vPlanes)
 	{
-		for (int Q=0; Q<vPlanes.size(); Q++)
+        for (size_t Q=0; Q<vPlanes.size(); Q++)
 		{
 			if (vPlanes[Q].contour == NULL)
 				vPlanes[Q].getContour();
 
-			if (vPlanes[Q].type == 0)
-				this->drawCloud(vPlanes[Q].contour, 0.0f, 255.0f, 0.0f, Q);
-			else if (vPlanes[Q].type == 1)
-				this->drawCloud(vPlanes[Q].contour, 0.0f, 0.0f, 255.0f, Q);
-			else if (vPlanes[Q].type == 2)
-				this->drawCloud(vPlanes[Q].contour, 255.0f, 255.0f, 0.0f, Q);
-			else if (vPlanes[Q].type == 3)
-				this->drawCloud(vPlanes[Q].contour, 255.0f, 255.0f, 0.0f, Q);
-			else if (vPlanes[Q].type == 4)
-				this->drawCloud(vPlanes[Q].contour, 255.0f, 255.0f, 0.0f, Q);
-			else if (vPlanes[Q].type == 5)
-				this->drawCloud(vPlanes[Q].contour, 255.0f, 0.0f, 0.0f, Q);
+            double r,g,b;
+            getColorType(r,g,b,vPlanes[Q].type);
+
+            this->drawCloud(vPlanes[Q].contour, r, g, b, Q);
+            this->drawPlaneNormal(vPlanes[Q], r/255, g/255, b/255, Q);
 		}
 	}	
   void Viewer::drawPlaneTypesContour (std::vector<Plane> vPlanes, Eigen::Affine3d pose)
@@ -297,19 +307,10 @@
       pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_to_draw (new pcl::PointCloud<pcl::PointXYZ>);
       pcl::transformPointCloud(*vPlanes[Q].contour,*cloud_to_draw,pose);
 
+      double r,g,b;
+      getColorType(r,g,b,vPlanes[Q].type);
+      this->drawCloud(cloud_to_draw, r, g, b, Q);
 
-      if (vPlanes[Q].type == 0)
-        this->drawCloud(cloud_to_draw, 0.0f, 255.0f, 0.0f, Q);
-      else if (vPlanes[Q].type == 1)
-        this->drawCloud(cloud_to_draw, 0.0f, 0.0f, 255.0f, Q);
-      else if (vPlanes[Q].type == 2)
-        this->drawCloud(cloud_to_draw, 255.0f, 255.0f, 0.0f, Q);
-      else if (vPlanes[Q].type == 3)
-        this->drawCloud(cloud_to_draw, 255.0f, 255.0f, 0.0f, Q);
-      else if (vPlanes[Q].type == 4)
-        this->drawCloud(cloud_to_draw, 255.0f, 255.0f, 0.0f, Q);
-      else if (vPlanes[Q].type == 5)
-        this->drawCloud(cloud_to_draw, 255.0f, 0.0f, 0.0f, Q);
     }
   }
 
@@ -320,18 +321,10 @@
 			pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_to_draw (new pcl::PointCloud<pcl::PointXYZ>);
 			pcl::transformPointCloud(*vPlanes[Q].cloud,*cloud_to_draw,pose);
 
-			if (vPlanes[Q].type == 0)
-				this->drawCloud(cloud_to_draw, 0.0f, 255.0f, 0.0f, Q);
-			else if (vPlanes[Q].type == 1)
-				this->drawCloud(cloud_to_draw, 0.0f, 0.0f, 255.0f, Q);
-			else if (vPlanes[Q].type == 2)
-				this->drawCloud(cloud_to_draw, 255.0f, 255.0f, 0.0f, Q);
-			else if (vPlanes[Q].type == 3)
-				this->drawCloud(cloud_to_draw, 255.0f, 255.0f, 0.0f, Q);
-			else if (vPlanes[Q].type == 4)
-				this->drawCloud(cloud_to_draw, 255.0f, 255.0f, 0.0f, Q);
-			else if (vPlanes[Q].type == 5)
-				this->drawCloud(cloud_to_draw, 255.0f, 0.0f, 0.0f, Q);
+            double r,g,b;
+            getColorType(r,g,b,vPlanes[Q].type);
+            this->drawCloud(cloud_to_draw, r, g, b, Q);
+
 		}
 	}
 	
@@ -344,7 +337,8 @@
 		sprintf (cube_name, "Cube_%d", unsigned(Q));
 
 		cloud_viewer_.addCube(tfinal, qfinal, z_dir, y_dir, x_dir,cube_name); 
-	}
+    }
+
 	
 	void Viewer::drawPerson(float person_height, Eigen::Vector4f floor_normal)
 	{
@@ -463,13 +457,15 @@
 
         void Viewer::drawPlaneAxis (Plane plane, int index)
         {
-            pcl::PointXYZ origin = plane.center;
 
-            Eigen::Vector3f vec_x = origin.getVector3fMap() + plane.eigDx.col(0) * 0.5;
+            if (plane.eigDx.isZero())
+                plane.getMeasurements();
+
+            Eigen::Vector3f vec_x = plane.center.getVector3fMap() + plane.eigDx.col(0) * 0.5;
             pcl::PointXYZ point_x(vec_x(0),vec_x(1),vec_x(2));
-            Eigen::Vector3f vec_y = origin.getVector3fMap() + plane.eigDx.col(1) * 0.5;
+            Eigen::Vector3f vec_y = plane.center.getVector3fMap() + plane.eigDx.col(1) * 0.5;
             pcl::PointXYZ point_y(vec_y(0),vec_y(1),vec_y(2));
-            Eigen::Vector3f vec_z = origin.getVector3fMap() + plane.eigDx.col(2) * 0.5;
+            Eigen::Vector3f vec_z = plane.center.getVector3fMap() + plane.eigDx.col(2) * 0.5;
             pcl::PointXYZ point_z(vec_z(0),vec_z(1),vec_z(2));
 
             char x_arrow[1024];
@@ -479,9 +475,24 @@
             char z_arrow[1024];
             sprintf (z_arrow, "z_arrow_%d", index);
 
-            cloud_viewer_.addArrow (point_x, origin, 1.0f, 0.0f, 0.0f, false, x_arrow);
-            cloud_viewer_.addArrow (point_y, origin, 0.0f, 1.0f, 0.0f, false, y_arrow);
-            cloud_viewer_.addArrow (point_z, origin, 0.0f, 0.0f, 1.0f, false, z_arrow);
+            cloud_viewer_.addArrow (point_x, plane.center, 0.5, 0.0, 0.0, false, x_arrow);
+            cloud_viewer_.addArrow (point_y, plane.center, 0.0, 0.5, 0.0, false, y_arrow);
+            cloud_viewer_.addArrow (point_z, plane.center, 0.0, 0.0, 0.5, false, z_arrow);
+        }
+
+        void Viewer::drawPlaneNormal (Plane plane, double r, double g, double b, int index)
+        {
+//            if (plane.eigDx.isZero())
+//                plane.getPrincipalDirections();
+
+//            Eigen::Vector3f vec_x = plane.centroid.getVector3fMap() + plane.eigDx.col(0) * 0.5;
+            Eigen::Vector3f vec_x = plane.centroid.getVector3fMap() + plane.coeffs.head<3>() * 0.5;
+            pcl::PointXYZ point_x(vec_x(0),vec_x(1),vec_x(2));
+
+            char x_arrow[1024];
+            sprintf (x_arrow, "normal_arrow_%d", index);
+
+            cloud_viewer_.addArrow (point_x, plane.centroid, r, g, b, false, x_arrow);
         }
 	
 	void Viewer::createAxis ()

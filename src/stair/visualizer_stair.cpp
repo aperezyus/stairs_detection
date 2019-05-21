@@ -286,8 +286,8 @@ void ViewerStair::drawFullAscendingStairUntil (Stair stair, int level, Eigen::Af
 
     this->drawRectangle(vertices,0,0,1,name);
     this->drawRectangle(riser_vertices,1,1,0,rname);
-    // this->drawRectangle(left_vertices,0,1,0,lpname);
-    // this->drawRectangle(right_vertices,0,1,0,rpname);
+     this->drawRectangle(left_vertices,0,1,0,lpname);
+     this->drawRectangle(right_vertices,0,1,0,rpname);
 
 
 
@@ -376,10 +376,10 @@ void ViewerStair::drawFullAscendingStairUntil (Stair stair, int level, Eigen::Af
     this->drawRectangle(vertices,0,0,1,name);
     this->drawRectangle(riser_vertices,1,1,0,rname);
 
-    // pcl::transformPointCloud(*left_vertices,*left_vertices,pose*s2p);
-    // pcl::transformPointCloud(*right_vertices,*right_vertices,pose*s2p);
-    // this->drawRectangle(left_vertices,0,1,0,lpname);
-    // this->drawRectangle(right_vertices,0,1,0,rpname);
+     pcl::transformPointCloud(*left_vertices,*left_vertices,pose*s2p);
+     pcl::transformPointCloud(*right_vertices,*right_vertices,pose*s2p);
+     this->drawRectangle(left_vertices,0,1,0,lpname);
+     this->drawRectangle(right_vertices,0,1,0,rpname);
 
 
 
@@ -446,11 +446,11 @@ void ViewerStair::drawFullDescendingStairUntil (Stair stair, int level, Eigen::A
     const std::string rtmp = ssr.str();
     const char* rname = rtmp.c_str();
     std::stringstream sslp;
-    sslp << "leftup_" << Q;
+    sslp << "leftdown_" << Q;
     const std::string lptmp = sslp.str();
     const char* lpname = lptmp.c_str();
     std::stringstream ssrp;
-    ssrp << "rightup_" << Q;
+    ssrp << "rightdown_" << Q;
     const std::string rptmp = ssrp.str();
     const char* rpname = rptmp.c_str();
 
@@ -470,7 +470,7 @@ void ViewerStair::drawFullDescendingStairUntil (Stair stair, int level, Eigen::A
 
     this->drawRectangle(vertices,0,0,1,name);
     this->drawRectangle(riser_vertices,1,1,0,rname);
-    // this->drawRectangle(left_vertices,0,1,0,lpname);
-    // this->drawRectangle(right_vertices,0,1,0,rpname);
+     this->drawRectangle(left_vertices,0,1,0,lpname);
+     this->drawRectangle(right_vertices,0,1,0,rpname);
   }
 }

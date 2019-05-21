@@ -52,9 +52,9 @@ struct Viewer
 		// 640,480/							window size
 		// 66,52 							window pos
 
-                 cloud_viewer_.setBackgroundColor (0, 0, 0); // black
+        cloud_viewer_.setBackgroundColor (0, 0, 0); // black
 //		cloud_viewer_.setBackgroundColor (255, 255, 255); // white
-//                cloud_viewer_.addCoordinateSystem (1.0);
+        cloud_viewer_.addCoordinateSystem (1.0);
 		// cloud_viewer_.initCameraParameters ();
 		cloud_viewer_.setPosition (0, 0);
 		
@@ -79,9 +79,9 @@ struct Viewer
 
 		name_ = "camera";    
 		
-		// cloud_viewer_.addText ("No ascending stairs", 50, 50, 20, 1.0f, 1.0f, 1.0f, "uptext");
-		// cloud_viewer_.addText ("No descending stairs", 50, 100, 20, 1.0f, 1.0f, 1.0f, "downtext");
-		// cloud_viewer_.addText ("On the ground", 50, 150, 20, 1.0f, 1.0f, 1.0f, "infotext");
+//         cloud_viewer_.addText ("No ascending stairs", 50, 50, 20, 1.0f, 1.0f, 1.0f, "uptext");
+//         cloud_viewer_.addText ("No descending stairs", 50, 100, 20, 1.0f, 1.0f, 1.0f, "downtext");
+//         cloud_viewer_.addText ("On the ground", 50, 150, 20, 1.0f, 1.0f, 1.0f, "infotext");
 		
 		iteration = 0;
 	}
@@ -97,6 +97,7 @@ struct Viewer
   void drawCloudsRandom (std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr > vClouds);
   void drawCloudsRandom (std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr > vClouds, Eigen::Affine3d pose);
   void drawPlanesRandom (std::vector<Plane> vPlanes, Eigen::Affine3d pose);
+  void getColorType(double &r, double &g, double &b, int type);
 	void drawPlaneTypes (std::vector<Plane> vPlanes);
 	void drawPlaneTypesContour (std::vector<Plane> vPlanes);
 	void drawPlaneTypes (std::vector<Plane> vPlanes, Eigen::Affine3d pose);
@@ -117,6 +118,7 @@ struct Viewer
 	void drawAxis (Eigen::Affine3d& pose);
 	void drawAxis (Eigen::Matrix3f pose);
         void drawPlaneAxis (Plane plane, int index);
+        void drawPlaneNormal (Plane plane, double r, double g, double b, int index);
 	
 	// Former visOdo camera drawing functions
 	inline void 

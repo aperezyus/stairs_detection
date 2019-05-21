@@ -23,10 +23,10 @@
 
 Plane getBiggestStep (std::vector<Plane> vPlanes)
 {
-  int index = 0;
-  int size = 0;
+  size_t index = 0;
+  size_t size = 0;
 
-  for (int Q = 0; Q<vPlanes.size(); Q++)
+  for (size_t Q = 0; Q<vPlanes.size(); Q++)
   {
 
     if (Q == 0)
@@ -38,7 +38,7 @@ Plane getBiggestStep (std::vector<Plane> vPlanes)
       // if (vPlanes[Q].level > 0)
 //      if (vPlanes[Q].isValid)
 //      {
-        int current_size = vPlanes[Q].cloud->points.size();
+        size_t current_size = vPlanes[Q].cloud->points.size();
         if (current_size > size)
         {
           index = Q;
@@ -57,75 +57,160 @@ void Stair::getStairDirFromPlane(Eigen::Affine3d c2f, Plane &plane)
   if (plane.eigDx.isZero(0))
       plane.getPrincipalDirections();
 
-  Eigen::Vector3f best_normal2c = plane.eigDx.col(2);
-  Eigen::Vector3f best_normal = c2f.rotation().cast<float>()*best_normal2c;
+  Eigen::Vector3f v_floor(0.0f, -sin(M_PI/4), -sin(M_PI/4));
+  Eigen::Vector3f v_front(0.0f, 0.0f, 1.0f);
 
-  float angle_x = acos(Eigen::Vector2f(best_normal(0),best_normal(2)).normalized().dot(Eigen::Vector2f(1,0)));
-  float angle_z = acos(Eigen::Vector2f(best_normal(0),best_normal(2)).normalized().dot(Eigen::Vector2f(0,1)));
-//    float angle_x = getHorizontalAngle(best_normal,Eigen::Vector3f(1,0,0));
-//    float angle_z = getHorizontalAngle(best_normal,Eigen::Vector3f(0,0,1));
+  Eigen::MatrixXf angles_y, angles_z;
+  angles_y = acos((v_floor.transpose()*plane.eigDx).array().abs());
+  angles_z = acos((v_front.transpose()*plane.eigDx).array().abs());
+  int index_x, index_y, index_z;
 
-  float threshold = 45*M_PI/180;
-
-  Eigen::Matrix3f eigDx2f = Eigen::Matrix3f::Identity();
-
-  if ((fabs(2*M_PI-angle_z) < threshold) or (angle_z < threshold))
-  {
-      eigDx2f.col(0) = Eigen::Vector3f(best_normal(2),0, -best_normal(0));
-      eigDx2f.col(2) = Eigen::Vector3f(best_normal(0),0,best_normal(2));
-      eigDx2f.col(1) = eigDx2f.col(2).cross(eigDx2f.col(0));
-  }
-  else if (fabs(M_PI-angle_z) < threshold)
-  {
-      eigDx2f.col(0) = Eigen::Vector3f(-best_normal(2),0,best_normal(0));
-      eigDx2f.col(2) = Eigen::Vector3f(-best_normal(0),0,-best_normal(2));
-      eigDx2f.col(1) = eigDx2f.col(2).cross(eigDx2f.col(0));
-  }
+  if (angles_y(0,0) < angles_y(0,1) & angles_y(0,0) < angles_y(0,2))
+      index_y = 0;
+  else if (angles_y(0,1) < angles_y(0,0) & angles_y(0,1) < angles_y(0,2))
+      index_y = 1;
   else
+      index_y = 2;
+
+  if (angles_z(0,0) < angles_z(0,1) & angles_z(0,0) < angles_z(0,2))
+      index_z = 0;
+  else if (angles_z(0,1) < angles_z(0,0) & angles_z(0,1) < angles_z(0,2))
+      index_z = 1;
+  else
+      index_z = 2;
+
+//    std::cout << "index_y " << index_y << " index_z " << index_z << std::endl;
+
+  if (index_y == index_z)
   {
-      if ((fabs(2*M_PI-angle_x) < threshold) or (angle_x < threshold))
+      if (angles_y(0,index_y) < angles_z(0,index_z))
       {
-          eigDx2f.col(0) = Eigen::Vector3f(best_normal(0),0, best_normal(2));
-          eigDx2f.col(2) = Eigen::Vector3f(-best_normal(2),0, best_normal(0));
-          eigDx2f.col(1) = eigDx2f.col(2).cross(eigDx2f.col(0));
-
-      }
-      else if (fabs(M_PI-angle_x) < threshold)
-      {
-          eigDx2f.col(0) = Eigen::Vector3f(-best_normal(0),0,-best_normal(2));
-          eigDx2f.col(2) = Eigen::Vector3f(best_normal(2),0,-best_normal(0));
-          eigDx2f.col(1) = eigDx2f.col(2).cross(eigDx2f.col(0));
-
-      }
+          if (index_y != 0)
+              if (angles_z(0,0) < angles_z(0,1) || angles_z(0,0) < angles_z(0,2))
+                  index_z = 0;
+          if (index_y != 1)
+              if (angles_z(0,1) < angles_z(0,0) || angles_z(0,1) < angles_z(0,2))
+                  index_z = 1;
+          if (index_y != 2)
+              if (angles_z(0,2) < angles_z(0,0) || angles_z(0,2) < angles_z(0,1))
+                  index_z = 2;
+       }
       else
       {
-          eigDx2f.col(0) = Eigen::Vector3f(best_normal(0),0,best_normal(2));
-          eigDx2f.col(2) = Eigen::Vector3f(-best_normal(2),0,best_normal(0));
-          eigDx2f.col(1) = eigDx2f.col(2).cross(eigDx2f.col(0));
+          if (index_z != 0)
+              if (angles_y(0,0) < angles_y(0,1) || angles_y(0,0) < angles_y(0,2))
+                  index_y = 0;
+          if (index_z != 1)
+              if (angles_y(0,1) < angles_y(0,0) || angles_y(0,1) < angles_y(0,2))
+                  index_y = 1;
+          if (index_z != 2)
+              if (angles_y(0,2) < angles_y(0,0) || angles_y(0,2) < angles_y(0,1))
+                  index_y = 2;
       }
   }
 
-  Eigen::Affine3f f2c_aux = c2f.inverse().cast<float>();
-  f2c_aux.translation() = Eigen::Vector3f(0,0,0);
+  if (index_y == 0)
+      if (index_z == 1)
+          index_x = 2;
+      else
+          index_x = 1;
+  else if (index_y == 1)
+      if (index_z == 0)
+          index_x = 2;
+      else
+          index_x = 0;
+  else
+      if (index_z == 0)
+          index_x = 1;
+      else
+          index_x = 0;
 
-  Eigen::Matrix3f step_dir;
+  Eigen::Vector3f dx = plane.eigDx.col(index_x);
+  Eigen::Vector3f dy = plane.eigDx.col(index_y);
+  Eigen::Vector3f dz = plane.eigDx.col(index_z);
 
-  step_dir.col(0) = (f2c_aux)*eigDx2f.col(0);
-  step_dir.col(1) = (f2c_aux)*eigDx2f.col(1);
-  step_dir.col(2) = (f2c_aux)*eigDx2f.col(2);
+  if (dy(1) > 0)//(acos(v_floor.transpose()*dy) > M_PI/2)
+      dy = -dy;
+  if (dz(2) < 0)//(acos(v_front.transpose()*dz) > M_PI/2)
+      dz = -dz;
+  dx = dy.cross(dz);
 
-  plane.eigDx = step_dir;
+  Eigen::MatrixXf final_eigDx(3,3);
+  final_eigDx << dx, dy, dz;
+
+//  Eigen::Vector3f best_normal2c = plane.eigDx.col(2);
+//  Eigen::Vector3f best_normal = c2f.rotation().cast<float>()*best_normal2c;
+
+
+
+
+//  float angle_x = acos(Eigen::Vector2f(best_normal(0),best_normal(2)).normalized().dot(Eigen::Vector2f(1,0)));
+//  float angle_z = acos(Eigen::Vector2f(best_normal(0),best_normal(2)).normalized().dot(Eigen::Vector2f(0,1)));
+////    float angle_x = getHorizontalAngle(best_normal,Eigen::Vector3f(1,0,0));
+////    float angle_z = getHorizontalAngle(best_normal,Eigen::Vector3f(0,0,1));
+
+//  float threshold = 45*float(M_PI)/180;
+
+//  Eigen::Matrix3f eigDx2f = Eigen::Matrix3f::Identity();
+
+//  if ((fabs(2*float(M_PI)-angle_z) < threshold) or (angle_z < threshold))
+//  {
+//      eigDx2f.col(0) = Eigen::Vector3f(best_normal(2),0, -best_normal(0));
+//      eigDx2f.col(2) = Eigen::Vector3f(best_normal(0),0,best_normal(2));
+//      eigDx2f.col(1) = eigDx2f.col(2).cross(eigDx2f.col(0));
+//  }
+//  else if (fabs(float(M_PI)-angle_z) < threshold)
+//  {
+//      eigDx2f.col(0) = Eigen::Vector3f(-best_normal(2),0,best_normal(0));
+//      eigDx2f.col(2) = Eigen::Vector3f(-best_normal(0),0,-best_normal(2));
+//      eigDx2f.col(1) = eigDx2f.col(2).cross(eigDx2f.col(0));
+//  }
+//  else
+//  {
+//      if ((fabs(2*float(M_PI)-angle_x) < threshold) or (angle_x < threshold))
+//      {
+//          eigDx2f.col(0) = Eigen::Vector3f(best_normal(0),0, best_normal(2));
+//          eigDx2f.col(2) = Eigen::Vector3f(-best_normal(2),0, best_normal(0));
+//          eigDx2f.col(1) = eigDx2f.col(2).cross(eigDx2f.col(0));
+
+//      }
+//      else if (fabs(float(M_PI)-angle_x) < threshold)
+//      {
+//          eigDx2f.col(0) = Eigen::Vector3f(-best_normal(0),0,-best_normal(2));
+//          eigDx2f.col(2) = Eigen::Vector3f(best_normal(2),0,-best_normal(0));
+//          eigDx2f.col(1) = eigDx2f.col(2).cross(eigDx2f.col(0));
+
+//      }
+//      else
+//      {
+//          eigDx2f.col(0) = Eigen::Vector3f(best_normal(0),0,best_normal(2));
+//          eigDx2f.col(2) = Eigen::Vector3f(-best_normal(2),0,best_normal(0));
+//          eigDx2f.col(1) = eigDx2f.col(2).cross(eigDx2f.col(0));
+//      }
+//  }
+
+
+//  Eigen::Affine3f f2c_aux = c2f.inverse().cast<float>();
+//  f2c_aux.translation() = Eigen::Vector3f(0,0,0);
+
+//  Eigen::Matrix3f step_dir;
+
+//  step_dir.col(0) = (f2c_aux)*eigDx2f.col(0);
+//  step_dir.col(1) = (f2c_aux)*eigDx2f.col(1);
+//  step_dir.col(2) = (f2c_aux)*eigDx2f.col(2);
+
+  plane.eigDx = final_eigDx;
 }
 
 Plane Stair::getBestStep(Eigen::Affine3d T)
 {
-  int index = 0;
+  size_t index = 0;
   float max_extent = 0;
 
   float sum_of_contour_areas = 0;
 
 // std::cout << "Sum of contour areas" << std::endl;
-  for (int Q = 1; Q<vLevels.size(); Q++)
+  for (size_t Q = 1; Q<vLevels.size(); Q++)
   {
     // std::cout << "Q = " << Q << std::endl;
     // if (vPlanes[Q].contour_area == 0)
@@ -137,7 +222,7 @@ Plane Stair::getBestStep(Eigen::Affine3d T)
 
   // std::cout << "Sum of contour areas: " << sum_of_contour_areas << std::endl;
   // std::cout << "Planos a comprobar: " << std::endl;
-  for (int Q = 1; Q<vLevels.size(); Q++)
+  for (size_t Q = 1; Q<vLevels.size(); Q++)
   {
     // std::cout << "Q = " << Q << std::endl;
     if (vLevels[Q].eigDx.isZero(0))
@@ -150,7 +235,7 @@ Plane Stair::getBestStep(Eigen::Affine3d T)
     // std::cout << "Sum of rectangle areas" << std::endl;
 
     float sum_of_rectangle_areas = 0;
-    for (int P = 1; P<vLevels.size(); P++)
+    for (size_t P = 1; P<vLevels.size(); P++)
     {
       // std::cout << "P = " << P << std::endl;
       sum_of_rectangle_areas += vLevels[P].getRectangleArea(vLevels[Q].eigDx);
@@ -221,7 +306,7 @@ void Stair::getInitialStepVertices(Eigen::Matrix3f & dir)
 {
 	Eigen::Matrix3f aux = dir;
 	
-	for (int Q=1; Q<vLevels.size(); Q++)
+    for (size_t Q=1; Q<vLevels.size(); Q++)
 	{
 		// vLevels[Q].getPrincipalDirections();
 		vLevels[Q].getMeasurements(dir);
@@ -241,21 +326,21 @@ void Stair::getInitialStepVertices(Eigen::Matrix3f & dir)
 		
 		vLevels[Q].getVertices(dir);
 		
-		if (Q == 2)
-		{
-      if (acos(stair_dir.col(2).dot(Eigen::Vector3f(vLevels[Q].vertices->points[4].x-vLevels[Q-1].vertices->points[4].x,0,vLevels[Q].vertices->points[4].z-vLevels[Q-1].vertices->points[4].z).normalized()))>M_PI_2)
-//			if (getAngle(dir.col(2),Eigen::Vector3f(vLevels[Q].vertices->points[4].x-vLevels[Q-1].vertices->points[4].x,0,vLevels[Q].vertices->points[4].z-vLevels[Q-1].vertices->points[4].z))*180/M_PI > 90)
-			{
+//		if (Q == 2)
+//		{
+//      if (acos(stair_dir.col(2).dot(Eigen::Vector3f(vLevels[Q].vertices->points[4].x-vLevels[Q-1].vertices->points[4].x,0,vLevels[Q].vertices->points[4].z-vLevels[Q-1].vertices->points[4].z).normalized()))>M_PI_2)
+////			if (getAngle(dir.col(2),Eigen::Vector3f(vLevels[Q].vertices->points[4].x-vLevels[Q-1].vertices->points[4].x,0,vLevels[Q].vertices->points[4].z-vLevels[Q-1].vertices->points[4].z))*180/M_PI > 90)
+//			{
 				
 //        std::cout << "estos ejes van al revés!" << std::endl;
 				
-				dir.col(0) = -dir.col(0);
-				dir.col(2) = -dir.col(2);
+//				dir.col(0) = -dir.col(0);
+//				dir.col(2) = -dir.col(2);
 				
-				vLevels[Q].getVertices(dir);
-				vLevels[Q-1].getVertices(dir);
-			}
-		}
+//				vLevels[Q].getVertices(dir);
+//				vLevels[Q-1].getVertices(dir);
+//			}
+//		}
 
 //     std::cout << vLevels[Q].vertices->points[0].x << " " << vLevels[Q].vertices->points[0].y << " " << vLevels[Q].vertices->points[0].z << std::endl;
 //     std::cout << vLevels[Q].vertices->points[1].x << " " << vLevels[Q].vertices->points[1].y << " " << vLevels[Q].vertices->points[1].z << std::endl;
@@ -367,10 +452,9 @@ void Stair::getInitialStairVolume(Eigen::Matrix3f manhattan_dirs, Eigen::Matrix3
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr allPoints (new pcl::PointCloud<pcl::PointXYZ>);
 	
-	for (int Q=1; Q<vLevels.size(); Q++)
-	{
-		*allPoints += *vLevels[Q].cloud;
-	}
+    for (size_t Q=1; Q<vLevels.size(); Q++)
+        *allPoints += *vLevels[Q].cloud;
+
 	Eigen::Vector4f vector_centroid;
 	pcl::compute3DCentroid(*allPoints,vector_centroid);
 	centroid = pcl::PointXYZ (vector_centroid[0], vector_centroid[1], vector_centroid[2]);
@@ -425,10 +509,9 @@ void Stair::getInitialStairVolume(Eigen::Matrix3f manhattan_dirs, Eigen::Matrix3
 //      std::cout << "Standalone " << volume_standalone << std::endl;
 //      std::cout << "Manhattan " << volume_manhattan << std::endl;
 
-	    if (volume_standalone < 0.95*volume_manhattan)
+        if (volume_standalone < 0.95f*volume_manhattan)
 	    // if (volume_standalone < volume_manhattan)
 	    {
-	    	
 	    	width = width_standalone;
 	    	length = length_standalone;
 	    	height = height_standalone;

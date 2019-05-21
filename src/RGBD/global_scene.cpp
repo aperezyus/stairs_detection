@@ -20,7 +20,7 @@
 
 #include "RGBD/global_scene.h"
 //#include "custom_functions.h"
-
+#include "RGBD/visualizer.h"
 
 void GlobalScene::findFloor(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
 {
@@ -29,9 +29,9 @@ void GlobalScene::findFloor(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
 	
 	while (cloud_filtered->points.size() < 200)
 	{
-                z_dist+=0.1;
+                z_dist+=0.1f;
 		//~ std::cout << "Creando nube filtrada de suelo a " << z_dist << "m." << std::endl;
-		pcl::PassThrough<pcl::PointXYZ> pass;
+        pcl::PassThrough<pcl::PointXYZ> pass;
 		pass.setInputCloud(cloud);
 		pass.setFilterFieldName("z");
 		pass.setFilterLimits(0.0, z_dist);
@@ -45,14 +45,19 @@ void GlobalScene::findFloor(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
 	
 	while ((!initial_floor) and (tries > 0))
 	{
-		initial_floor = this->subtractInitialPlane(cloud_filtered, floor_normal);
+//        std::cout << "Trying with a cloud of " << cloud_filtered->points.size() << " points" << std::endl;
+//        Viewer viewer_aux;
+//        viewer_aux.drawCloud(cloud_filtered,255.0,255.0,255.0,100);
+//        viewer_aux.cloud_viewer_.spin();
+
+        initial_floor = this->subtractInitialPlane(cloud_filtered, floor_normal);
 		tries -= 1;
 		if (tries == 0)
 		{
-			z_dist+=0.1;
+            z_dist+=0.1f;
 			if (z_dist > 5)
 				break;
-			//~ std::cout << "Creando nube filtrada de suelo a " << z_dist << "m." << std::endl;
+//            std::cout << "Creando nube filtrada de suelo a " << z_dist << "m." << std::endl;
 			pcl::PassThrough<pcl::PointXYZ> pass;
 			pass.setInputCloud(cloud);
 			pass.setFilterFieldName("z");
@@ -96,15 +101,17 @@ bool GlobalScene::subtractInitialPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr &clou
     float C=(coefficients->values[2]);
     float D=(coefficients->values[3]);
 
+    if (D < 0) {A = -A; B = -B; C = -C; D = -D;}
+
     Eigen::Vector3f v_plane(A,B,C);
-    Eigen::Vector3f v_floor(0.0f, -sin(M_PI/4), -sin(M_PI/4));
+    Eigen::Vector3f v_floor(0.0f, -sin(M_PI_4), -sin(M_PI_4));
 
     float angle = pcl::rad2deg(acos(v_plane.dot(v_floor)));
 //    std::cout << angle << std::endl;
 //    std::cout << D << std::endl;
 
 
-    if (angle < 40 && fabs(D) > 1.0 && fabs(D) < 1.6)
+    if (angle < 45 && fabs(D) > 1.0f && fabs(D) < 1.6f)
     {
 //      std::cout << "Suelo encontrado" << std::endl;
 //      std::cout << "Coeficientes de la ecuación del plano -> A: " << A << " B: " << B << " C: " << C << " D: " << D << std::endl;
@@ -273,21 +280,27 @@ void GlobalScene::findFloorFast(std::vector<Plane> vPlanes)
 	for (int Q=0; Q<vPlanes.size();Q++)
 	{
 		
-		Eigen::Vector4f normal = Eigen::Vector4f(-vPlanes[Q].coeffs[0],-vPlanes[Q].coeffs[1],-vPlanes[Q].coeffs[2], -vPlanes[Q].coeffs[3]);
-		
-    float angle = acos(normal.head<3>().dot(floor_normal.head<3>()));
+//		Eigen::Vector4f normal = Eigen::Vector4f(vPlanes[Q].coeffs[0],vPlanes[Q].coeffs[1],vPlanes[Q].coeffs[2], vPlanes[Q].coeffs[3]);
+
+//    float angle = acos(vPlanes[Q].coeffs.head<3>().dot(floor_normal.head<3>()));
 //		float angle;
 //		angle = getAngle(normal, floor_normal);
-		
-//        std::cout << pcl::rad2deg(angle) << " " << (fabs(fabs(vPlanes[Q].coeffs[3])-fabs(floor_normal[3]))) << std::endl;
-        if ((pcl::rad2deg(angle)<15) and (fabs(fabs(vPlanes[Q].coeffs[3])-fabs(floor_normal[3]))<=0.08f))
+
+        float dot = vPlanes[Q].coeffs.head<3>().dot(floor_normal.head<3>());
+        dot = ( dot < -1.0f ? -1.0f : ( dot > 1.0f ? 1.0f : dot ) );
+
+//        std::cout << "plane " << Q << " size " << vPlanes[Q].cloud->points.size() << " coeffs " << vPlanes[Q].coeffs << std::endl;
+//        std::cout << vPlanes[Q].coeffs.head<3>().dot(floor_normal.head<3>()) << " " << acos(vPlanes[Q].coeffs.head<3>().dot(floor_normal.head<3>())) << " " << pcl::rad2deg(acos(vPlanes[Q].coeffs.head<3>().dot(floor_normal.head<3>()))) << std::endl;
+//        std::cout << pcl::rad2deg(angle) << " " << (fabs(fabs(vPlanes[Q].coeffs[3])-fabs(floor_normal[3]))) << " " << vPlanes[Q].cloud->points.size() << std::endl;
+        if ((pcl::rad2deg(acos(dot)) < 15) and (fabs(fabs(vPlanes[Q].coeffs[3])-fabs(floor_normal[3]))<=0.08f))
 		// if (pcl::rad2deg(angle)<10)
 		{
 //            std::cout << "Se ha cambiado el suelo con un angulo de " << pcl::rad2deg(angle) << std::endl << std::endl;
-			floor_normal = normal;
+            floor_normal = vPlanes[Q].coeffs;
             new_floor = true;
 			current_floor = Q;
 //			return floor_found;
+            break;
 		}
 	}
 //	return floor_found;
@@ -369,32 +382,31 @@ void GlobalScene::updateFloorWithManhattan()
 
 void GlobalScene::getManhattanDirections(CurrentScene &scene)
 {
-  if (new_floor)
-  {
-//                             std::cout << "getting Manhattan dirs from planes with floor" << std::endl;
-      scene.getManhattanDirectionsFromPlanesWithFloor(f2c);
-      if (scene.has_manhattan == false)
-      {
-//                                 std::cout << "getting Manhattan dirs from normals" << std::endl;
-          scene.getManhattanDirectionsFromNormals();
-      }
-  }
-  else
-  {
-//                             std::cout << "getting Manhattan dirs from planes" << std::endl;
-     scene.getManhattanDirectionsFromPlanes();
-     if (scene.has_manhattan == false)
-     {
-//                                std::cout << "getting Manhattan dirs from normals" << std::endl;
-         scene.getManhattanDirectionsFromNormals();
-     }
-  }
+//    std::cout << c2f.matrix() << std::endl;
+
+
+    if (new_floor)
+    {
+        std::cout << "getting Manhattan dirs from planes with floor" << std::endl;
+        scene.getManhattanDirectionsFromPlanesWithFloor(f2c);
+    }
+    if (scene.has_manhattan == false)
+    {
+        std::cout << "getting Manhattan dirs from planes" << std::endl;
+        scene.getManhattanDirectionsFromPlanes();
+        if (scene.has_manhattan == false)
+        {
+                   std::cout << "getting Manhattan dirs from normals" << std::endl;
+            scene.getManhattanDirectionsFromNormals();
+        }
+    }
+
 
   if (scene.has_manhattan)
   {
 
-//    std::cout << scene.eigDx << std::endl;
-//    std::cout << c2f.matrix() << std::endl;
+//      std::cout << eigDx << std::endl;
+
       updateManhattanDirections(scene.eigDx);
       updateFloorWithManhattan();
 

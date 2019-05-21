@@ -78,8 +78,8 @@ void CurrentScene::getNormalsNeighbors(int neighbors)
 	pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normal_estimator;
 	normal_estimator.setSearchMethod (tree_aux);
 	normal_estimator.setInputCloud (fcloud);
-  normal_estimator.setKSearch (neighbors);
-  normal_estimator.useSensorOriginAsViewPoint();
+    normal_estimator.setKSearch (neighbors);
+    normal_estimator.useSensorOriginAsViewPoint();
 
 	normal_estimator.compute (*normals_aux);
 	
@@ -90,20 +90,25 @@ void CurrentScene::getNormalsNeighbors(int neighbors)
 	*tree = *tree_aux;
 }
 
+bool sortIndicesBySize(const pcl::PointIndices &lhs, const pcl::PointIndices &rhs)
+{
+    return lhs.indices.size() > rhs.indices.size(); // Large planes to small planes
+}
+
 
 void CurrentScene::regionGrowing()
 {
 	// Extraer regiones con el algoritmo region growing del pcl
-	pcl::RegionGrowing<pcl::PointXYZ, pcl::Normal> reg;
-        reg.setMinClusterSize (50);
+    pcl::RegionGrowing<pcl::PointXYZ, pcl::Normal> reg;
+    reg.setMinClusterSize (30);
 	// reg.setMinClusterSize (20);
-	reg.setMaxClusterSize (5000000);
-	reg.setSmoothModeFlag(true);
+//	reg.setMaxClusterSize (5000000);
+//	reg.setSmoothModeFlag(true);
 	reg.setSearchMethod (tree);
-        reg.setNumberOfNeighbours (8);//8
+        reg.setNumberOfNeighbours (16);//8
         reg.setInputCloud (fcloud); //fcloud
 	reg.setInputNormals (normals);
-    reg.setSmoothnessThreshold (10.0 / 180.0 * M_PI);//6
+    reg.setSmoothnessThreshold (6.0 / 180.0 * M_PI);//6
 	reg.setCurvatureThreshold (0.5);//0.5
 
 	std::vector <pcl::PointIndices> regions;
@@ -112,10 +117,10 @@ void CurrentScene::regionGrowing()
 	pcl::PointIndices::Ptr total_indices (new pcl::PointIndices);
 	
 	//// Ordenar las regiones por tamaño
-	//sort(regions.begin(), regions.end(), sortIndicesBySize);
+    sort(regions.begin(), regions.end(), sortIndicesBySize);
 	
 	remaining_points.reset(new pcl::PointCloud<pcl::PointXYZ>);
-        *remaining_points = *fcloud;//fcloud
+    *remaining_points = *fcloud;//fcloud
 	
 	// Crear el vector de clusters que contiene todas las regiones encontradas
 	std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> vClusters;
@@ -181,7 +186,7 @@ bool CurrentScene::isPlane (pcl::PointCloud<pcl::PointXYZ>::Ptr &region)
 		seg.setModelType (pcl::SACMODEL_PLANE);
 		seg.setMethodType (pcl::SAC_RANSAC);
 		seg.setMaxIterations (100);
-		seg.setDistanceThreshold (0.02);//0.04
+        seg.setDistanceThreshold (0.04);//0.04
 	
 		// Segment the largest planar component from the remaining cloud
 		seg.setInputCloud (region);
@@ -191,18 +196,27 @@ bool CurrentScene::isPlane (pcl::PointCloud<pcl::PointXYZ>::Ptr &region)
 		float n_points_plane = inliers->indices.size();
 		float ratio = n_points_plane/n_points_total;
 		
-		if (ratio > 0.80)//0.8
+        if (ratio > 0.80f)//0.8
 		{
 			is_plane = true;
 						
 			Eigen::Vector4f plane_vector(coefficients->values[0],coefficients->values[1],coefficients->values[2],coefficients->values[3]);
-			//double angle = pcl::getAngle3D(plane_vector,viewpoint);
-			double angle = pcl::getAngle3D(plane_vector,Eigen::Vector4f(0,2,2,1));
-			if (pcl::rad2deg(angle) > 90)
-				plane_vector = -plane_vector;
+//			//double angle = pcl::getAngle3D(plane_vector,viewpoint);
+//            double angle = pcl::getAngle3D(plane_vector,Eigen::Vector4f(0,0,1,1));
+//            if (pcl::rad2deg(angle) > 90)
+//                plane_vector = -plane_vector;
+
+//            Eigen::Vector3f point = region->points[0].getVector3fMap().normalized();
+//            if (pcl::rad2deg(acos(plane_vector.head<3>().dot(-region->points[0].getVector3fMap().normalized()))) > 90)
+//                plane_vector = -plane_vector;
+
+
+            if (plane_vector[3] < 0) {plane_vector = -plane_vector;}
+
 		
 
-      Plane plane(region, plane_vector);
+            Plane plane(region, plane_vector);
+//            std::cout << "Points of region " << plane.cloud->points.size() << " coeffs " << plane_vector << std::endl;
 //			plane.coeffs = plane_vector;
 //			plane.cloud.reset(new pcl::PointCloud<pcl::PointXYZ>() );
 //			*plane.cloud = *region;
@@ -211,6 +225,7 @@ bool CurrentScene::isPlane (pcl::PointCloud<pcl::PointXYZ>::Ptr &region)
 		}
 		else
 		{
+//            std::cout << ratio << " " << n_points_plane << " " << n_points_total << std::endl;
 			vObstacles.push_back(region);
 		}
 	}
@@ -402,15 +417,15 @@ void CurrentScene::classifyPlanes()
 {
         for (int Q=0; Q<vPlanes.size();Q++)
         {
-                float A = -vPlanes[Q].coeffs2f[0];
-                float B = -vPlanes[Q].coeffs2f[1];
-                float C = -vPlanes[Q].coeffs2f[2];
-                float D = -vPlanes[Q].coeffs2f[3];
+                float A = vPlanes[Q].coeffs2f[0];
+                float B = vPlanes[Q].coeffs2f[1];
+                float C = vPlanes[Q].coeffs2f[2];
+                float D = vPlanes[Q].coeffs2f[3];
 
 //                std::cout << A << " " << B << " " << C << " " << D << std::endl;
 
 //                float angle = fabs(getAngle(Eigen::Vector4f(A,B,C,D), Eigen::Vector4f(0,1,0,0))*180/M_PI);
-                float angle = acos(Eigen::Vector3f(A,B,C).dot(Eigen::Vector3f(0,1,0)));
+                float angle = pcl::rad2deg(acos(Eigen::Vector3f(A,B,C).dot(Eigen::Vector3f(0,1,0))));
 
 
 //                std::cout << angle << std::endl;
@@ -418,8 +433,8 @@ void CurrentScene::classifyPlanes()
                 //Identificación de planos
                 if (fabs(A)>fabs(B) and fabs(A)>fabs(C))
                 {
-                        if (D>0)
-                        {
+//                        if (D>0)
+//                        {
                                 if (fabs(90-angle)<10)
                                 {
                                         // Pared derecha
@@ -430,20 +445,20 @@ void CurrentScene::classifyPlanes()
                                         // Obstáculo derecho
                                         vPlanes[Q].type = 5;
                                 }
-                        }
-                        else
-                        {
-                                if (fabs(90-angle)<10)
-                                {
-                                        // Pared izquierda
-                                        vPlanes[Q].type = 2;
-                                }
-                                else
-                                {
-                                        // Obstáculo izquierdo
-                                        vPlanes[Q].type = 5;
-                                }
-                        }
+//                        }
+//                        else
+//                        {
+//                                if (fabs(90-angle)<10)
+//                                {
+//                                        // Pared izquierda
+//                                        vPlanes[Q].type = 2;
+//                                }
+//                                else
+//                                {
+//                                        // Obstáculo izquierdo
+//                                        vPlanes[Q].type = 5;
+//                                }
+//                        }
                 }
                 else if (fabs(C)>fabs(A) and fabs(C)>fabs(B))
                 {
@@ -482,85 +497,11 @@ void CurrentScene::classifyPlanes()
         //std::cout << std::endl;
 }
 
-void CurrentScene::classifyPlanesAbs()
-{
-        for (int Q=0; Q<vPlanes.size();Q++)
-        {
-                float A = -vPlanes[Q].coeffs2f[0];
-                float B = -vPlanes[Q].coeffs2f[1];
-                float C = -vPlanes[Q].coeffs2f[2];
-                float D = -vPlanes[Q].coeffs2f[3];
-
-//                std::cout << A << " " << B << " " << C << " " << D << std::endl;
-
-//                float angle = fabs(getAngle(Eigen::Vector4f(A,B,C,D), Eigen::Vector4f(0,0,1,0))*180/M_PI);
-                float angle = acos(Eigen::Vector3f(A,B,C).dot(Eigen::Vector3f(0,1,0)));
-
-
-//                std::cout << angle << std::endl;
-
-                //Identificación de planos
-                if (fabs(B)>fabs(A) and fabs(B)>fabs(A))
-                {
-                  if (fabs(90-angle)<10)
-                  {
-                    // Pared izquierda o derecha
-                    vPlanes[Q].type = 2;
-                  }
-                  else
-                  {
-                    // Obstáculo izquierdo o derecho
-                    vPlanes[Q].type = 5;
-                  }
-                }
-                else if (fabs(A)>fabs(B) and fabs(A)>fabs(C))
-                {
-                        if (fabs(90-angle)<10)
-                        {
-                                // Pared frontal
-                                vPlanes[Q].type = 3;
-                        }
-                        else
-                        {
-                                // Obstáculo frontal
-                                vPlanes[Q].type = 5;
-                        }
-                }
-                else if (fabs(C)>fabs(A) and fabs(C)>fabs(B))
-                {
-                        // Suelo
-                        if ((angle<15) || fabs(angle-180) < 15)
-                        // if (angle<10)
-                        {
-//                                 std::cout << fabs(vPlanes[Q].centroid2f.y) << std::endl;
-                                if (fabs(vPlanes[Q].centroid2f.z)<=0.08f)
-                                // if (fabs(vPlanes[Q].centroid2f.y)<=0.07f)
-                                {
-                                        vPlanes[Q].type = 0;
-                                }
-                                else
-                                {
-                                        vPlanes[Q].type = 1;
-                                }
-                        }
-                        else
-                                vPlanes[Q].type = 5;
-                }
-        }
-        //std::cout << std::endl;
-}
-
-
-
-
-
-
-
 
 void CurrentScene::getManhattanDirectionsFromNormals()
 {
 
-    size_t N_normals = normals->points.size();
+    int N_normals = int(normals->points.size());
     if (N_normals < 3)
         return;
 
@@ -578,22 +519,24 @@ void CurrentScene::getManhattanDirectionsFromNormals()
         return;
     */
     Eigen::MatrixXf normals_eigen;
-    size_t N_normals_max = 1000;
+    int N_normals_max = 1000;
     normals_eigen.resize(N_normals_max,3);
 
 //    if (N_normals > N_normals_max)
 //    {
-        std::vector<int> indexes(N_normals);
+        std::vector<size_t> indexes(static_cast<size_t>(N_normals));
         std::iota(std::begin(indexes), std::end(indexes), 0);
         std::random_shuffle(indexes.begin(), indexes.end());
 //        indexes.resize(N_normals_max);
 
-        size_t size_cloud = 0;
-        int i = 0;
+        int size_cloud = 0;
+        size_t i = 0;
 
         while (size_cloud < N_normals_max)
         {
-            if (normals->points[indexes[i]].curvature < 0.005)
+
+
+            if (normals->points[indexes[i]].curvature < 0.005f && normals->points[indexes[i]].curvature > 0.00f)  // curvature must be small, but normals with 0 curvature come from isolated points
             {
                 normals_eigen(size_cloud,0) = normals->points[indexes[i]].normal_x;
                 normals_eigen(size_cloud,1) = normals->points[indexes[i]].normal_y;
@@ -614,6 +557,10 @@ void CurrentScene::getManhattanDirectionsFromNormals()
             N_normals = N_normals_max;
 
 
+//        std::cout << normals_eigen << std::endl;
+//    normals_eigen.rowwise().normalize();
+
+
 
     /* PCA ATTEMPT
     std::cout << normals_eigen << std::endl << std::endl;
@@ -627,24 +574,31 @@ void CurrentScene::getManhattanDirectionsFromNormals()
     std::cout << eigDx << std::endl << std::endl;*/
 
     int N_reps = 500;
-    float ang_threshold = 10*M_PI/180;
+    float ang_threshold = 10*float(M_PI)/180;
     int N_inliers_max = 0;
-    float sum_angles_min = M_PI/2*N_normals;
+//    float sum_angles_min = float(M_PI)/2*N_normals;
 
     Eigen::MatrixXf best_eigDx = Eigen::MatrixXf::Identity(3,3);
 
     for (int i=0; i<N_reps; i++)
     {
-        std::vector<int> indexes(N_normals);
+        std::vector<int> indexes(static_cast<size_t>(N_normals));
         std::iota(std::begin(indexes), std::end(indexes), 0);
         std::random_shuffle(indexes.begin(), indexes.end());
         indexes.resize(2);
 
         Eigen::Vector3f v1 = normals_eigen.row(indexes[0]);//normals->points[indexes[0]].getNormalVector3fMap();
         Eigen::Vector3f v_aux = normals_eigen.row(indexes[1]);
+        v1.normalize();
+        v_aux.normalize();
         Eigen::Vector3f v2 = v1.cross(v_aux);//normals->points[indexes[1]].getNormalVector3fMap());
         v2.normalize();
         Eigen::Vector3f v3 = v1.cross(v2);
+//        v3.normalize();
+
+
+//        std::cout << "dots" << std::endl;
+//        std::cout << v1.dot(v2) << " " << v2.dot(v3) << " " << v3.dot(v1) << std::endl;
 
         Eigen::MatrixXf ang1, ang2, ang3;
         ang1 = acos((normals_eigen*v1).array().abs());
@@ -653,36 +607,62 @@ void CurrentScene::getManhattanDirectionsFromNormals()
         Eigen::MatrixXf min_ang;
         min_ang = ang3.array().min(ang1.array().min(ang2.array()));
 
-        float sum_angles = min_ang.sum();
 
-        float N_inliers = (min_ang.array() < ang_threshold).count();
+//        std::cout << "min_ang\n" << min_ang.size() << std::endl;
+
+//        std::cout << "angs" << std::endl;
+//        std::cout << ang1 << " " << ang2 << " " << ang3 << " " << min_ang << std::endl;
+
+//        float sum_angles = min_ang.sum();
+
+        int N_inliers = int((min_ang.array() < ang_threshold).count());
+
+//        std::cout << "N_inliers " << N_inliers << std::endl;
 
         if (N_inliers > N_inliers_max)
 //        if (sum_angles < sum_angles_min)
         {
            N_inliers_max = N_inliers;
-           sum_angles_min = sum_angles;
+//           sum_angles_min = sum_angles;
            Eigen::MatrixXf current_eigDx(3,3);
            current_eigDx << v1, v2, v3;
            best_eigDx = current_eigDx;
+
+//           std::cout << "v" << std::endl << std::endl;
+//           std::cout << v1 << std::endl << std::endl << v2 << std::endl << std::endl << v3 << std::endl << std::endl;
 
 //           std::cout << "current eigDx\n" << current_eigDx << std::endl;
 //           std::cout << "sum_angles: " << sum_angles << std::endl;
 //           std::cout << "N_inliers: " << N_inliers << " N_normals: " << N_normals << std::endl;
 
-           if (N_inliers_max > 0.80*float(N_normals))
+           if (N_inliers_max > 0.60f*float(N_normals))
            {
                has_manhattan = true;
                 break;
            }
         }
-         if (N_inliers_max > 0.5*float(N_normals) && i > 50)
+         if (N_inliers_max > 0.3f*float(N_normals) && i > 50)
          {
+//             std::cout << "enters here" << std::endl;
              has_manhattan = true;
              break;
          }
 
     }
+
+
+//    // N_inliers with floor
+//    Eigen::MatrixXf ang1, ang2, ang3;
+//    ang1 = acos((normals_eigen*f2c.col(0).cast<float>()).array().abs());
+//    ang2 = acos((normals_eigen*f2c.col(1).cast<float>()).array().abs());
+//    ang3 = acos((normals_eigen*f2c.col(2).cast<float>()).array().abs());
+//    Eigen::MatrixXf min_ang;
+//    min_ang = ang3.array().min(ang1.array().min(ang2.array()));
+//    int N_inliers = int((min_ang.array() < ang_threshold).count());
+//    std::cout << "N_inliers floor " << N_inliers << std::endl;
+
+//    std::cout << "N_inliers_max " << N_inliers_max << std::endl;
+
 
     if (has_manhattan)
         eigDx = sortManhattanDirections(best_eigDx);
@@ -701,28 +681,32 @@ void CurrentScene::getManhattanDirectionsFromPlanesWithFloor(Eigen::Affine3d f2c
     int plane_selected = 0;
     Eigen::Vector3f best_normal(0,0,0);
 
-    for (int P = 0; P < vPlanes.size(); P++)
+    for (size_t P = 0; P < vPlanes.size(); P++)
     {
+//        std::cout << "Plane " << P << " is type " << vPlanes[P].type << std::endl;
         total_points += vPlanes[P].cloud->points.size();
         if (vPlanes[P].type == 2 || vPlanes[P].type == 3)
         {
             Eigen::Vector3f normal;
             normal = vPlanes[P].coeffs2f.block<3,1>(0,0);
 
-            n_inliers = vPlanes[P].cloud->points.size();
+            n_inliers = int(vPlanes[P].cloud->points.size());
 
-            for (int Q = 0; Q < vPlanes.size(); Q++)
+            for (size_t Q = 0; Q < vPlanes.size(); Q++)
             {
                 if ((Q != P) and (vPlanes[Q].type == 2 || vPlanes[Q].type == 3))
                 {
+//                    std::cout << "Plane " << Q << " is type " << vPlanes[Q].type << std::endl;
+
                     Eigen::Vector3f current_normal;
                     current_normal = vPlanes[Q].coeffs2f.block<3,1>(0,0);
 //                    float angle;
 //                    angle = getHorizontalAngle(normal,current_normal);
-                    float angle = acos(Eigen::Vector2f(normal(0),normal(2)).normalized().dot(Eigen::Vector2f(current_normal(0),current_normal(2))));
+                    double angle = double(acos(Eigen::Vector2f(normal(0),normal(2)).normalized().dot(Eigen::Vector2f(current_normal(0),current_normal(2)))));
 
+//                    std::cout << angle << std::endl;
 
-                    float threshold = 5*M_PI/180;
+                    double threshold = 5.0*M_PI/180.0;
                     if ((fabs(2*M_PI-angle) < threshold) or (fabs(M_PI/2-angle) < threshold) or (fabs(M_PI-angle) < threshold) or (fabs(3/2*M_PI-angle) < threshold) or (angle < threshold))
                     {
                         n_inliers += vPlanes[Q].cloud->points.size();
@@ -734,10 +718,12 @@ void CurrentScene::getManhattanDirectionsFromPlanesWithFloor(Eigen::Affine3d f2c
             {
                 max_n_inliers = n_inliers;
                 best_normal = normal;
-                plane_selected = P;
+                plane_selected = int(P);
             }
         }
     }
+
+//    std::cout << max_n_inliers << std::endl;
 
 //    if (max_n_inliers > 0.1*((float)total_points))
     if (max_n_inliers > 0)

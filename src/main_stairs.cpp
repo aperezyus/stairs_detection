@@ -18,7 +18,7 @@
 * along with stairs_detection. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#define _USE_MATH_DEFINES
+//#define _USE_MATH_DEFINES
 
 #include <math.h>
 #include <iostream>
@@ -58,7 +58,6 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 
-//#include "custom_functions.h"
 #include "stair/visualizer_stair.h"
 #include "stair/global_scene_stair.h"
 #include "stair/current_scene_stair.h"
@@ -137,6 +136,51 @@ struct mainLoop
     }
   }
 
+  void startPCD(int argc, char* argv[])
+  {
+//     ROS subscribing
+    ros::init(argc, argv, "kinect_navigator_node");
+    ros::NodeHandle nh;
+
+    color_cloud.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
+    cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
+
+    std::string cloud_file = argv[2];
+    sensor_msgs::PointCloud2 input;
+    pcl::io::loadPCDFile(cloud_file, input);
+    pcl::fromROSMsg(input,*color_cloud);
+    pcl::copyPointCloud(*color_cloud,*cloud);
+
+
+
+
+//    ros::Subscriber cloud_sub = nh.subscribe("/camera/depth_registered/points", 1, &mainLoop::cloudCallback, this);
+
+//    int tries = 0;
+//    while (cloud_sub.getNumPublishers() == 0)
+//    {
+//      ROS_INFO("Waiting for subscibers");
+//      sleep(1);
+//      tries++;
+//      if (tries > 5)
+//        return;
+//    }
+
+//    capture_.reset(new ros::AsyncSpinner(0));
+
+//    {
+//      boost::unique_lock<boost::mutex> lock(data_ready_mutex_);
+//      capture_->start();
+
+      while (nh.ok())
+      {
+//        bool has_data = data_ready_cond_.timed_wait(lock, boost::posix_time::millisec(500));
+        if (cloud->points.size() > 0)
+          this->execute();
+      }
+//    }
+  }
+
   void execute()
   {
 
@@ -152,11 +196,13 @@ struct mainLoop
     {
       gscene.findFloor(scene.fcloud);
       gscene.computeCamera2FloorMatrix();
+      viewer.drawAxis(gscene.f2c);
 
     }
     else
     {
-      scene.getNormalsNeighbors(4);
+      scene.getNormalsNeighbors(16);
+//      scene.getNormalsRadius(0.05f);
       scene.regionGrowing();
       scene.extractClusters(scene.remaining_points);
       gscene.findFloorFast(scene.vPlanes);
@@ -173,8 +219,12 @@ struct mainLoop
 //        scene.transformPlanesAndObstacles(gscene.c2f, false);
 //      }
 
+//      std::cout << gscene.c2f.matrix() << std::endl;
+
+
+//      viewer.drawNormals (scene.normals, scene.fcloud);
       viewer.drawPlaneTypesContour(scene.vPlanes);
-      viewer.drawCloudsRandom(scene.vObstacles);
+//      viewer.drawCloudsRandom(scene.vObstacles);
       viewer.drawAxis(gscene.f2c);
 
       if (scene.checkForStairs())
@@ -189,15 +239,13 @@ struct mainLoop
           double x,y,z,roll,pitch,yaw;
           pcl::getTranslationAndEulerAngles (gscene.f2s, x, y, z, roll, pitch, yaw);
           std::stringstream ss;
-          ss << "Ascending stairs at " << -z << "m y " << pitch*180/M_PI << "º";
-          viewer.cloud_viewer_.updateText(ss.str(), 50, 50, "uptext");
+          ss << "Ascending stairs at " << -z << "m and " << pitch*180/M_PI << "º";
+          viewer.cloud_viewer_.addText (ss.str(), 50, 50, 20, 1.0f, 1.0f, 1.0f, "uptext");
           scene.upstair.getExactStepVertices();
           viewer.drawFullAscendingStairUntil(scene.upstair,scene.upstair.vLevels.size(),scene.upstair.s2i);
           viewer.drawStairAxis (scene.upstair, scene.upstair.type);
 //          viewer.drawStairs(scene.upstair,scene.upstair.type);
         }
-        else
-          viewer.cloud_viewer_.updateText("No ascending stairs", 50, 50, "uptext");
 
         if (scene.getLevelsFromCandidates(scene.downstair,gscene.c2f))
         {
@@ -209,14 +257,19 @@ struct mainLoop
           double x,y,z,roll,pitch,yaw;
           pcl::getTranslationAndEulerAngles (gscene.f2s, x, y, z, roll, pitch, yaw);
           std::stringstream ss;
-          ss << "Descending stairs at " << -z << "m y " << pitch*180/M_PI << "º";
-          viewer.cloud_viewer_.updateText(ss.str(), 50, 100, "downtext");
+          ss << "Descending stairs at " << -z << "m and " << pitch*180/M_PI << "º";
+          viewer.cloud_viewer_.addText (ss.str(), 50, 100, 20, 1.0f, 1.0f, 1.0f, "downtext");
           scene.downstair.getExactStepVertices();
           viewer.drawFullDescendingStairUntil(scene.downstair,scene.downstair.vLevels.size(),scene.downstair.s2i);
-        }
-        else
-          viewer.cloud_viewer_.updateText("No descending stairs", 50, 100, "downtext");
+          viewer.drawStairAxis (scene.upstair, scene.upstair.type);
 
+        }
+
+      }
+      else
+      {
+          viewer.cloud_viewer_.addText ("No ascending stairs", 50, 50, 20, 1.0f, 1.0f, 1.0f, "uptext");
+          viewer.cloud_viewer_.addText ("No descending stairs", 50, 100, 20, 1.0f, 1.0f, 1.0f, "downtext");
       }
 
     }
@@ -241,22 +294,74 @@ struct mainLoop
 
 };
 
+void parseArguments(int argc, char ** argv, int &capture_mode)
+{
+//std::cout << argc << std::endl;
+
+    capture_mode = 0;
+    if (argc == 1)
+    {
+        capture_mode = 1; // From rosbag or live camera
+    }
+    else if (argc == 2)
+    {
+        if ((strcmp(argv[1], "h") == 0) or (strcmp(argv[1], "-h") == 0) or (strcmp(argv[1], "--h") == 0) or (strcmp(argv[1], "help") == 0) or (strcmp(argv[1], "-help") == 0) or (strcmp(argv[1], "--help") == 0))
+        {
+            std::cout << "USAGE" << std::endl;
+            std::cout << "./navegador_interiores_alejandro old : uses old openni driver with /camera/rgb/points as topic for the PointClouds" << std::endl;
+            std::cout << "./navegador_interiores_alejandro new : uses new openni2 driver with /camera/depth_registered/points as topic for the PointClouds" << std::endl;
+            std::cout << "./navegador_interiores_alejandro : uses new openni2 driver with /camera/depth_registered/points as topic for the PointClouds" << std::endl;
+            std::cout << "./navegador_interiores_alejandro pcd filename.pcd: loads PointCloud from filename.pcd" << std::endl;
+        }
+    }
+    else if (argc == 3)
+    {
+        if (strcmp(argv[1], "pcd") == 0)
+        {
+            capture_mode = 0; // reads from PCD, which is the next argument
+
+        }
+    }
+}
 
 int main(int argc, char* argv[])
 {
   mainLoop app;
+  int capture_mode;
+  parseArguments(argc,argv,capture_mode);
 
-  try
+  if (capture_mode == 1)
   {
-    app.startMainLoop(argc, argv);
+      try
+      {
+        app.startMainLoop(argc, argv);
+      }
+      catch (const std::bad_alloc& /*e*/)
+      {
+        cout << "Bad alloc" << endl;
+      }
+      catch (const std::exception& /*e*/)
+      {
+        cout << "Exception" << endl;
+      }
   }
-  catch (const std::bad_alloc& /*e*/)
+  else
   {
-    cout << "Bad alloc" << endl;
-  }
-  catch (const std::exception& /*e*/)
-  {
-    cout << "Exception" << endl;
+      if (argc > 2)
+      {
+          try
+          {
+            app.startPCD(argc, argv);
+          }
+          catch (const std::bad_alloc& /*e*/)
+          {
+            cout << "Bad alloc" << endl;
+          }
+          catch (const std::exception& /*e*/)
+          {
+            cout << "Exception" << endl;
+          }
+      }
   }
 
   return 0;
