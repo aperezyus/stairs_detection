@@ -65,12 +65,12 @@ struct CurrentScene
 
     //// Removes floor and ceiling parts (overhead) from absolute fcloud (normally used after getAbsoluteCloud)
     /// in: floor_height (although floor is at z = zero, a threshold is provided, e.g. 0.10m), ceiling_height
-    void filterFloorAndCeiling(double floor_height, double ceiling_height);
+    void filterFloorAndCeiling(float floor_height, float ceiling_height);
 
     //// Get normals point cloud from fcloud using radius search
     /// in: radius (in metres)
     /// out: normals (pointcloud of pcl::Normal), tree (KdTree used also in region-growing)
-    void getNormalsRadius(float radius);
+    void getNormalsRadius(double radius);
 
     //// Get normals point cloud from fcloud using neighbor search
     /// in: neighbors (number of)

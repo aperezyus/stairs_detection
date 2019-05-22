@@ -49,7 +49,7 @@
 		exists = cloud_viewer_.updatePointCloud<pcl::PointXYZ> (cloud, cloud_color, cloud_name);
 		if (!exists)
 			cloud_viewer_.addPointCloud<pcl::PointXYZ> (cloud, cloud_color, cloud_name);
-		cloud_viewer_.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 8, cloud_name);
+        cloud_viewer_.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 16, cloud_name);
 	}
 
   void Viewer::drawCloud (pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, Eigen::Affine3d pose, double r, double g, double b, int index)
@@ -65,7 +65,7 @@
     exists = cloud_viewer_.updatePointCloud<pcl::PointXYZ> (cloud_to_draw, cloud_color, cloud_name);
     if (!exists)
       cloud_viewer_.addPointCloud<pcl::PointXYZ> (cloud_to_draw, cloud_color, cloud_name);
-    cloud_viewer_.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 8, cloud_name);
+    cloud_viewer_.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 16, cloud_name);
   }
 	
   void Viewer::drawColorCloud (pcl::PointCloud<pcl::PointXYZRGB>::Ptr &cloud, int index)
@@ -78,7 +78,7 @@
 		if (!exists)
 			cloud_viewer_.addPointCloud (cloud,rgb, cloud_name);
 
-		cloud_viewer_.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 4, cloud_name);
+        cloud_viewer_.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, cloud_name);
 	}
 
   void Viewer::drawColorCloud (pcl::PointCloud<pcl::PointXYZRGB>::Ptr &cloud, Eigen::Affine3d pose, int index)
@@ -287,21 +287,21 @@
 	{
         for (size_t Q=0; Q<vPlanes.size(); Q++)
 		{
-			if (vPlanes[Q].contour == NULL)
+            if (vPlanes[Q].contour == nullptr)
 				vPlanes[Q].getContour();
 
             double r,g,b;
             getColorType(r,g,b,vPlanes[Q].type);
 
-            this->drawCloud(vPlanes[Q].contour, r, g, b, Q);
-            this->drawPlaneNormal(vPlanes[Q], r/255, g/255, b/255, Q);
+            this->drawCloud(vPlanes[Q].contour, r, g, b, int(Q));
+//            this->drawPlaneNormal(vPlanes[Q], r/255, g/255, b/255, int(Q));
 		}
 	}	
   void Viewer::drawPlaneTypesContour (std::vector<Plane> vPlanes, Eigen::Affine3d pose)
   {
     for (int Q=0; Q<vPlanes.size(); Q++)
     {
-      if (vPlanes[Q].contour == NULL)
+      if (vPlanes[Q].contour == nullptr)
         vPlanes[Q].getContour();
 
       pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_to_draw (new pcl::PointCloud<pcl::PointXYZ>);

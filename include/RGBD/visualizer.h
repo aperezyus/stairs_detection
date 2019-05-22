@@ -54,7 +54,7 @@ struct Viewer
 
         cloud_viewer_.setBackgroundColor (0, 0, 0); // black
 //		cloud_viewer_.setBackgroundColor (255, 255, 255); // white
-        cloud_viewer_.addCoordinateSystem (1.0);
+//        cloud_viewer_.addCoordinateSystem (1.0);
 		// cloud_viewer_.initCameraParameters ();
 		cloud_viewer_.setPosition (0, 0);
 		

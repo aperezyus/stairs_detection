@@ -58,55 +58,55 @@ struct GlobalScene
 
 	}
 
-  //// Finds the floor in scene from given point cloud
-  /// in: cloud (Pointcloud to find the floor)
-  /// out: floor_normal, initial_floor (true if there is floor in the image);
-	void findFloor(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
+    //// Finds the floor in scene from given point cloud
+    /// in: cloud (Pointcloud to find the floor)
+    /// out: (in class) floor_normal (4-element vector with plane coefficients [A,B,C,D]), initial_floor (true if there is floor in the image);
+    void findFloor(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
 
-  //// Performs RANSAC operation to find the floor
-  /// in: cloud (pointcloud to find the floor)
-  /// out: normal (to become floor_normal), true (if floor found)
+    //// Performs RANSAC operation to find the floor
+    /// in: cloud (pointcloud to find the floor)
+    /// out: normal (to become floor_normal), true (if floor found)
 	bool subtractInitialPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, Eigen::Vector4f &normal);
 
-  //// Computes camera to floor transformation matrix given floor_normal
-  /// in: floor_normal
-  /// out: c2f, f2c (camera to floor transformation matrix and inverse), person_height
-  void computeCamera2FloorMatrix ();
+    //// Computes camera to floor transformation matrix given floor_normal
+    /// in: floor_normal
+    /// out: c2f, f2c (camera to floor transformation matrix and inverse), person_height
+    void computeCamera2FloorMatrix ();
 
-  //// Computes camera to absolute camera reference (i.e. map reference, from gazebo, with Z upwards)
-  /// in: f2a (transformation matrix from floor reference frame (Y upwards) to absolute reference frame (Z upwards)
-  /// out: c2a, a2c (camera to absolute transformation matrix and inverse)
-  void computeCamera2AbsoluteMatrix (Eigen::Affine3d f2a);
+    //// Computes camera to absolute camera reference (i.e. map reference, from gazebo, with Z upwards)
+    /// in: f2a (transformation matrix from floor reference frame (Y upwards) to absolute reference frame (Z upwards)
+    /// out: c2a, a2c (camera to absolute transformation matrix and inverse)
+    void computeCamera2AbsoluteMatrix (Eigen::Affine3d f2a);
 
-  //// Update camera to absolute matrix with odometry values
-  /// in: c2c0 (odometry, i.e. transformation matrix from current camera (c) to initial camera (c0))
-  /// out: updated c2a, a2c
-  void computeCamera2AbsoluteMatrixWithOdometry (Eigen::Affine3d c2c0);
+    //// Update camera to absolute matrix with odometry values
+    /// in: c2c0 (odometry, i.e. transformation matrix from current camera (c) to initial camera (c0))
+    /// out: updated c2a, a2c
+    void computeCamera2AbsoluteMatrixWithOdometry (Eigen::Affine3d c2c0);
 
-  //// Update c2f given new floor_normal and compute variation w.r.t. old c2f
-  /// in: floor_normal
-  /// out: updated c2f, f2c, and f2f (transformation between old and current floor)
-  void computeIncrementalCamera2FloorMatrix ();
+    //// Update c2f given new floor_normal and compute variation w.r.t. old c2f
+    /// in: floor_normal
+    /// out: updated c2f, f2c, and f2f (transformation between old and current floor)
+    void computeIncrementalCamera2FloorMatrix ();
 
-  //// Find floor quickly given vPlanes
-  /// in: vPlanes (vector with Planes in the scene)
-  /// out: floor_normal, new_floor (true if there is new floor in vPlanes), current_floor (index of vPlanes)
-  void findFloorFast(std::vector<Plane> vPlanes);
+    //// Find floor quickly given vPlanes
+    /// in: vPlanes (vector with Planes in the scene)
+    /// out: floor_normal, new_floor (true if there is new floor in vPlanes), current_floor (index of vPlanes)
+    void findFloorFast(std::vector<Plane> vPlanes);
 
-  //// Given Manhattan directons from new scene, update old ones (maintaining orientaitons)
-  /// in: manhattan_dirs (new Manhattan directions)
-  /// out: eigDx (Principal directions), has_manhattan (true if Manhattan has been found)
-  void updateManhattanDirections(Eigen::Matrix3f manhattan_dirs);
+    //// Given Manhattan directons from new scene, update old ones (maintaining orientaitons)
+    /// in: manhattan_dirs (new Manhattan directions)
+    /// out: eigDx (Principal directions), has_manhattan (true if Manhattan has been found)
+    void updateManhattanDirections(Eigen::Matrix3f manhattan_dirs);
 
-  //// Updates floor with new Manhattan coordinates (to be used, e.g. when there is no floor in scene)
-  /// in: eigDx (Manhattan directions)
-  /// out: floor_normal, c2f, f2c
-  void updateFloorWithManhattan();
+    //// Updates floor with new Manhattan coordinates (to be used, e.g. when there is no floor in scene)
+    /// in: eigDx (Manhattan directions)
+    /// out: floor_normal, c2f, f2c
+    void updateFloorWithManhattan();
 
-  //// Find Manhattan directions in current scene and updates w.r.t. old Manhattan directions
-  /// in: scene (to compute Manhattan directions in current scene)
-  /// out: updated eigDx, floor_normal, c2f, f2c
-  void getManhattanDirections(CurrentScene &scene);
+    //// Find Manhattan directions in current scene and updates w.r.t. old Manhattan directions
+    /// in: scene (to compute Manhattan directions in current scene)
+    /// out: updated eigDx, floor_normal, c2f, f2c
+    void getManhattanDirections(CurrentScene &scene);
 
 	
   //// Variables

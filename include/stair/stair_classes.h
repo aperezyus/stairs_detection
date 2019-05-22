@@ -89,47 +89,35 @@ int neighbour_search(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, pcl::PointXYZ po
 //	  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 //};
 
-Plane getBiggestStep (std::vector<Plane> vPlanes);
 
 struct Stair
 {
-	// Constructor with standard settings
-	Stair()
-	{
-   
-	}
+    Stair()	{}
+    ~Stair(){}
 	
-	~Stair()
-	{
-		
-	}
-	
-  void getStairDirFromPlane(Eigen::Affine3d c2f, Plane &plane);
-  Plane getBestStep (Eigen::Affine3d T);
+    Plane getBestStep ();
+    void getStairDirFromPlane(Plane &plane);
 	void getInitialStepVertices();
 	void getInitialStepVertices(Eigen::Matrix3f & dir);
 	// void getStepVertices(Eigen::Matrix3f c2m);
-	void getClimbingStepVertices(Eigen::Affine3d & c2m);
+//	void getClimbingStepVertices(Eigen::Affine3d & c2m);
 	void getInitialStairVolume(Eigen::Matrix3f manhattan_dirs, Eigen::Matrix3f standalone_dirs, bool has_manhattan);
 	void getExactStepVertices();
 	// old
 	// void getInitialStepVertices(Eigen::Matrix3f c2m);
-	void getInitialStairVolume();
+    //	void getInitialStairVolume();
 	
 	std::vector<Plane> vPlanes;
 	std::vector<Plane> vLevels;
 	std::vector<Plane> vOrientedLevels;
 	std::vector<Plane> vRisers;
-	Eigen::Matrix3f stair_dir;
-	//~ Eigen::Matrix4f i2s;
-	//~ Eigen::Matrix4f s2i;
+    Eigen::Matrix3f stair_dir;
 	Eigen::Affine3d i2s;
 	Eigen::Affine3d i2s_non_corrected;
 	Eigen::Affine3d s2i;
 	pcl::PointXYZ centroid;
 	pcl::PointXYZ center;
 	
-	//~ Matrix3f dir;
 	float width;
 	float length;
 	float height;
@@ -140,10 +128,7 @@ struct Stair
 
 	std::string type;
 	
-	pcl::PointXYZ initial_point;
-	//~ pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
-	//~ int best_level;
-	//~ Vector3f back_dir;
+    pcl::PointXYZ initial_point;
 
 	int n_steps;
 	int step_im_on;

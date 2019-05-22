@@ -77,34 +77,18 @@
 
 struct mainLoop
 {
-  mainLoop() : gscene(), viewer()
-  {
-//    viewer.createAxis();
-//    gscene.global_cloud.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
-//    gscene.cumulated_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
-
+  mainLoop() : viewer(), gscene() {
+      color_cloud.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
+      cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
   }
 
   ~mainLoop() {}
 
-  void cloudCallback(const sensor_msgs::PointCloud2 &cloud_msg)
-  {
-      boost::mutex::scoped_try_lock lock(data_ready_mutex_);
-      if (!lock)
-        return;
-
-      color_cloud.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
-      cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
+  void cloudCallback(const sensor_msgs::PointCloud2 &cloud_msg) {
       pcl::fromROSMsg(cloud_msg,*color_cloud);
-      pcl::copyPointCloud(*color_cloud,*cloud);
-
-      data_ready_cond_.notify_one();
-
   }
 
-  void startMainLoop(int argc, char* argv[])
-  {
-
+  void startMainLoop(int argc, char* argv[]) {
     // ROS subscribing
     ros::init(argc, argv, "kinect_navigator_node");
     ros::NodeHandle nh;
@@ -112,8 +96,7 @@ struct mainLoop
     ros::Subscriber cloud_sub = nh.subscribe("/camera/depth_registered/points", 1, &mainLoop::cloudCallback, this);
 
     int tries = 0;
-    while (cloud_sub.getNumPublishers() == 0)
-    {
+    while (cloud_sub.getNumPublishers() == 0) {
       ROS_INFO("Waiting for subscibers");
       sleep(1);
       tries++;
@@ -121,29 +104,27 @@ struct mainLoop
         return;
     }
 
+    ros::Rate r(100);
+
     capture_.reset(new ros::AsyncSpinner(0));
+    capture_->start();
 
-    {
-      boost::unique_lock<boost::mutex> lock(data_ready_mutex_);
-      capture_->start();
+    while (nh.ok() && !viewer.cloud_viewer_.wasStopped()) {
+        if (color_cloud->points.size() > 0) {
+            pcl::copyPointCloud(*color_cloud,*cloud);
+            this->execute();
+        }
 
-      while (nh.ok())
-      {
-        bool has_data = data_ready_cond_.timed_wait(lock, boost::posix_time::millisec(500));
-        if (has_data && cloud->points.size() > 0)
-          this->execute();
-      }
+        r.sleep();
     }
+    capture_->stop();
+
   }
 
-  void startPCD(int argc, char* argv[])
-  {
-//     ROS subscribing
+  void startPCD(int argc, char* argv[]) {
+    // ROS subscribing
     ros::init(argc, argv, "kinect_navigator_node");
     ros::NodeHandle nh;
-
-    color_cloud.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
-    cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
 
     std::string cloud_file = argv[2];
     sensor_msgs::PointCloud2 input;
@@ -151,56 +132,32 @@ struct mainLoop
     pcl::fromROSMsg(input,*color_cloud);
     pcl::copyPointCloud(*color_cloud,*cloud);
 
-
-
-
-//    ros::Subscriber cloud_sub = nh.subscribe("/camera/depth_registered/points", 1, &mainLoop::cloudCallback, this);
-
-//    int tries = 0;
-//    while (cloud_sub.getNumPublishers() == 0)
-//    {
-//      ROS_INFO("Waiting for subscibers");
-//      sleep(1);
-//      tries++;
-//      if (tries > 5)
-//        return;
-//    }
-
-//    capture_.reset(new ros::AsyncSpinner(0));
-
-//    {
-//      boost::unique_lock<boost::mutex> lock(data_ready_mutex_);
-//      capture_->start();
-
-      while (nh.ok())
-      {
-//        bool has_data = data_ready_cond_.timed_wait(lock, boost::posix_time::millisec(500));
+    while (nh.ok() && !viewer.cloud_viewer_.wasStopped()) {
         if (cloud->points.size() > 0)
-          this->execute();
-      }
-//    }
+            this->execute();
+
+    }
+
+    capture_->stop();
   }
 
-  void execute()
-  {
+  void execute() {
 
+    // Prepare viewer for next iteration
     viewer.cloud_viewer_.removeAllPointClouds();
     viewer.cloud_viewer_.removeAllShapes();
-
     viewer.createAxis();
 
-
+    // Process cloud from current view
     CurrentSceneStair scene;
     scene.applyVoxelFilter(0.04f, cloud);
-    if (!gscene.initial_floor)
-    {
+
+    if (!gscene.initial_floor) {
       gscene.findFloor(scene.fcloud);
       gscene.computeCamera2FloorMatrix();
       viewer.drawAxis(gscene.f2c);
-
     }
-    else
-    {
+    else {
       scene.getNormalsNeighbors(16);
 //      scene.getNormalsRadius(0.05f);
       scene.regionGrowing();
@@ -214,25 +171,16 @@ struct mainLoop
       scene.getCentroids2Floor(gscene.c2f);
       scene.classifyPlanes();
       gscene.getManhattanDirections(scene);
-//      if (gscene.has_manhattan)
-//      {
-//        scene.transformPlanesAndObstacles(gscene.c2f, false);
-//      }
-
-//      std::cout << gscene.c2f.matrix() << std::endl;
-
 
 //      viewer.drawNormals (scene.normals, scene.fcloud);
       viewer.drawPlaneTypesContour(scene.vPlanes);
 //      viewer.drawCloudsRandom(scene.vObstacles);
       viewer.drawAxis(gscene.f2c);
 
-      if (scene.checkForStairs())
-      {
-        if (scene.getLevelsFromCandidates(scene.upstair,gscene.c2f))
-        {
+      if (scene.checkForStairs()) {
+        if (scene.getLevelsFromCandidates(scene.upstair,gscene.c2f)) {
           scene.upstair.type = "up";
-          Plane best_step = scene.upstair.getBestStep(gscene.c2f);
+          Plane best_step = scene.upstair.getBestStep();
           scene.upstair.getInitialStairVolume(gscene.eigDx, best_step.eigDx, scene.has_manhattan);
           scene.upstair.getInitialStepVertices();
           gscene.f2s = scene.upstair.i2s * gscene.f2c;
@@ -245,12 +193,13 @@ struct mainLoop
           viewer.drawFullAscendingStairUntil(scene.upstair,scene.upstair.vLevels.size(),scene.upstair.s2i);
           viewer.drawStairAxis (scene.upstair, scene.upstair.type);
 //          viewer.drawStairs(scene.upstair,scene.upstair.type);
+
+          viewer.cloud_viewer_.addSphere(scene.upstair.initial_point,0.05f,"initial_point_up");
         }
 
-        if (scene.getLevelsFromCandidates(scene.downstair,gscene.c2f))
-        {
+        if (scene.getLevelsFromCandidates(scene.downstair,gscene.c2f)) {
           scene.downstair.type = "down";
-          Plane best_step = scene.downstair.getBestStep(gscene.c2f);
+          Plane best_step = scene.downstair.getBestStep();
           scene.downstair.getInitialStairVolume(gscene.eigDx, best_step.eigDx, scene.has_manhattan);
           scene.downstair.getInitialStepVertices();
           gscene.f2s = scene.downstair.i2s * gscene.f2c;
@@ -261,13 +210,15 @@ struct mainLoop
           viewer.cloud_viewer_.addText (ss.str(), 50, 100, 20, 1.0f, 1.0f, 1.0f, "downtext");
           scene.downstair.getExactStepVertices();
           viewer.drawFullDescendingStairUntil(scene.downstair,scene.downstair.vLevels.size(),scene.downstair.s2i);
-          viewer.drawStairAxis (scene.upstair, scene.upstair.type);
+          viewer.drawStairAxis (scene.downstair, scene.downstair.type);
+
+          viewer.cloud_viewer_.addSphere(scene.downstair.initial_point,0.05f,"initial_point_down");
+
 
         }
 
       }
-      else
-      {
+      else {
           viewer.cloud_viewer_.addText ("No ascending stairs", 50, 50, 20, 1.0f, 1.0f, 1.0f, "uptext");
           viewer.cloud_viewer_.addText ("No descending stairs", 50, 100, 20, 1.0f, 1.0f, 1.0f, "downtext");
       }
@@ -299,14 +250,11 @@ void parseArguments(int argc, char ** argv, int &capture_mode)
 //std::cout << argc << std::endl;
 
     capture_mode = 0;
-    if (argc == 1)
-    {
+    if (argc == 1) {
         capture_mode = 1; // From rosbag or live camera
     }
-    else if (argc == 2)
-    {
-        if ((strcmp(argv[1], "h") == 0) or (strcmp(argv[1], "-h") == 0) or (strcmp(argv[1], "--h") == 0) or (strcmp(argv[1], "help") == 0) or (strcmp(argv[1], "-help") == 0) or (strcmp(argv[1], "--help") == 0))
-        {
+    else if (argc == 2) {
+        if ((strcmp(argv[1], "h") == 0) or (strcmp(argv[1], "-h") == 0) or (strcmp(argv[1], "--h") == 0) or (strcmp(argv[1], "help") == 0) or (strcmp(argv[1], "-help") == 0) or (strcmp(argv[1], "--help") == 0)) {
             std::cout << "USAGE" << std::endl;
             std::cout << "./navegador_interiores_alejandro old : uses old openni driver with /camera/rgb/points as topic for the PointClouds" << std::endl;
             std::cout << "./navegador_interiores_alejandro new : uses new openni2 driver with /camera/depth_registered/points as topic for the PointClouds" << std::endl;
@@ -314,10 +262,8 @@ void parseArguments(int argc, char ** argv, int &capture_mode)
             std::cout << "./navegador_interiores_alejandro pcd filename.pcd: loads PointCloud from filename.pcd" << std::endl;
         }
     }
-    else if (argc == 3)
-    {
-        if (strcmp(argv[1], "pcd") == 0)
-        {
+    else if (argc == 3) {
+        if (strcmp(argv[1], "pcd") == 0) {
             capture_mode = 0; // reads from PCD, which is the next argument
 
         }
@@ -330,35 +276,26 @@ int main(int argc, char* argv[])
   int capture_mode;
   parseArguments(argc,argv,capture_mode);
 
-  if (capture_mode == 1)
-  {
-      try
-      {
+  if (capture_mode == 1) {
+      try {
         app.startMainLoop(argc, argv);
       }
-      catch (const std::bad_alloc& /*e*/)
-      {
+      catch (const std::bad_alloc& /*e*/)  {
         cout << "Bad alloc" << endl;
       }
-      catch (const std::exception& /*e*/)
-      {
+      catch (const std::exception& /*e*/)  {
         cout << "Exception" << endl;
       }
   }
-  else
-  {
-      if (argc > 2)
-      {
-          try
-          {
+  else {
+      if (argc > 2) {
+          try {
             app.startPCD(argc, argv);
           }
-          catch (const std::bad_alloc& /*e*/)
-          {
+          catch (const std::bad_alloc& /*e*/) {
             cout << "Bad alloc" << endl;
           }
-          catch (const std::exception& /*e*/)
-          {
+          catch (const std::exception& /*e*/) {
             cout << "Exception" << endl;
           }
       }
