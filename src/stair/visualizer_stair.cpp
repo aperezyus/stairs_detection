@@ -474,3 +474,19 @@ void ViewerStair::drawFullDescendingStairUntil (Stair stair, int level, Eigen::A
      this->drawRectangle(right_vertices,0,1,0,rpname);
   }
 }
+
+void ViewerStair::addStairsText (Eigen::Affine3d i2s, Eigen::Affine3d f2c, std::string type){
+
+    Eigen::Affine3d f2s = i2s * f2c;
+    double x,y,z,roll,pitch,yaw;
+    pcl::getTranslationAndEulerAngles (f2s, x, y, z, roll, pitch, yaw);
+    std::stringstream ss;
+    if (type == "up"){
+        ss << "Ascending stairs at " << -z << "m and " << pitch*180/M_PI << "º";
+        cloud_viewer_.addText (ss.str(), 50, 50, 20, 1.0f, 1.0f, 1.0f, "uptext");
+    }
+    else{
+        ss << "Descending stairs at " << -z << "m and " << pitch*180/M_PI << "º";
+        cloud_viewer_.addText (ss.str(), 50, 50, 20, 1.0f, 1.0f, 1.0f, "downtext");
+    }
+}

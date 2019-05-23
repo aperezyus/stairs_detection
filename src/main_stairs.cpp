@@ -74,192 +74,185 @@
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
 
+void sayHelp(){
+    std::cout << "Arguments to pass:" << std::endl;
+    std::cout << "- If no arguments ('$ rosrun stairs_detection stairs'), algorithm proceed reading from ROS topic /camera/depth_registered/points" << std::endl;
+    std::cout << "- To run a PCD example (e.g. from Tang dataset), it should be '$ rosrun stairs_detection stairs pcd /path/to.pcd'" << std::endl;
+}
 
-struct mainLoop
-{
-  mainLoop() : viewer(), gscene() {
-      color_cloud.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
-      cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
-  }
-
-  ~mainLoop() {}
-
-  void cloudCallback(const sensor_msgs::PointCloud2 &cloud_msg) {
-      pcl::fromROSMsg(cloud_msg,*color_cloud);
-  }
-
-  void startMainLoop(int argc, char* argv[]) {
-    // ROS subscribing
-    ros::init(argc, argv, "kinect_navigator_node");
-    ros::NodeHandle nh;
-
-    ros::Subscriber cloud_sub = nh.subscribe("/camera/depth_registered/points", 1, &mainLoop::cloudCallback, this);
-
-    int tries = 0;
-    while (cloud_sub.getNumPublishers() == 0) {
-      ROS_INFO("Waiting for subscibers");
-      sleep(1);
-      tries++;
-      if (tries > 5)
-        return;
+class mainLoop {
+ public:
+    mainLoop() : viewer(), gscene() {
+        color_cloud.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
+        cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
     }
 
-    ros::Rate r(100);
+    ~mainLoop() {}
 
-    capture_.reset(new ros::AsyncSpinner(0));
-    capture_->start();
+    void cloudCallback(const sensor_msgs::PointCloud2 &cloud_msg) {
+        pcl::fromROSMsg(cloud_msg,*color_cloud);
+    }
 
-    while (nh.ok() && !viewer.cloud_viewer_.wasStopped()) {
-        if (color_cloud->points.size() > 0) {
-            pcl::copyPointCloud(*color_cloud,*cloud);
+    void startMainLoop(int argc, char* argv[]) {
+        // ROS subscribing
+        ros::init(argc, argv, "kinect_navigator_node");
+        ros::NodeHandle nh;
+
+        ros::Subscriber cloud_sub = nh.subscribe("/camera/depth_registered/points", 1, &mainLoop::cloudCallback, this);
+
+        int tries = 0;
+        while (cloud_sub.getNumPublishers() == 0) {
+            ROS_INFO("Waiting for subscibers");
+            sleep(1);
+            tries++;
+            if (tries > 5){
+                sayHelp();
+                return;
+            }
+        }
+
+        ros::Rate r(100);
+
+        capture_.reset(new ros::AsyncSpinner(0));
+        capture_->start();
+
+        while (nh.ok() && !viewer.cloud_viewer_.wasStopped()) {
+            if (color_cloud->points.size() > 0) {
+                pcl::copyPointCloud(*color_cloud,*cloud);
+                this->execute();
+            }
+
+            r.sleep();
+        }
+        capture_->stop();
+
+    }
+
+    void startPCD(int argc, char* argv[]) {
+        // ROS subscribing
+        ros::init(argc, argv, "kinect_navigator_node");
+        ros::NodeHandle nh;
+
+        std::string cloud_file = argv[2];
+        sensor_msgs::PointCloud2 input;
+        pcl::io::loadPCDFile(cloud_file, input);
+        pcl::fromROSMsg(input,*color_cloud);
+        pcl::copyPointCloud(*color_cloud,*cloud);
+
+        while (nh.ok() && !viewer.cloud_viewer_.wasStopped()) {
+            if (cloud->points.size() > 0)
             this->execute();
         }
 
-        r.sleep();
-    }
-    capture_->stop();
-
-  }
-
-  void startPCD(int argc, char* argv[]) {
-    // ROS subscribing
-    ros::init(argc, argv, "kinect_navigator_node");
-    ros::NodeHandle nh;
-
-    std::string cloud_file = argv[2];
-    sensor_msgs::PointCloud2 input;
-    pcl::io::loadPCDFile(cloud_file, input);
-    pcl::fromROSMsg(input,*color_cloud);
-    pcl::copyPointCloud(*color_cloud,*cloud);
-
-    while (nh.ok() && !viewer.cloud_viewer_.wasStopped()) {
-        if (cloud->points.size() > 0)
-            this->execute();
-
+        capture_->stop();
     }
 
-    capture_->stop();
-  }
+    void execute() {
 
-  void execute() {
+        // Prepare viewer for next iteration
+        viewer.cloud_viewer_.removeAllPointClouds();
+        viewer.cloud_viewer_.removeAllShapes();
+        viewer.createAxis();
 
-    // Prepare viewer for next iteration
-    viewer.cloud_viewer_.removeAllPointClouds();
-    viewer.cloud_viewer_.removeAllShapes();
-    viewer.createAxis();
+        // Process cloud from current view
+        CurrentSceneStair scene;
+        scene.applyVoxelFilter(0.04f, cloud);
 
-    // Process cloud from current view
-    CurrentSceneStair scene;
-    scene.applyVoxelFilter(0.04f, cloud);
-
-    if (!gscene.initial_floor) {
-      gscene.findFloor(scene.fcloud);
-      gscene.computeCamera2FloorMatrix();
-      viewer.drawAxis(gscene.f2c);
-    }
-    else {
-      scene.getNormalsNeighbors(16);
-//      scene.getNormalsRadius(0.05f);
-      scene.regionGrowing();
-      scene.extractClusters(scene.remaining_points);
-      gscene.findFloorFast(scene.vPlanes);
-      if (gscene.new_floor)
-        gscene.computeCamera2FloorMatrix();
-      scene.getCentroids();
-      scene.getContours();
-      scene.getPlaneCoeffs2Floor(gscene.c2f);
-      scene.getCentroids2Floor(gscene.c2f);
-      scene.classifyPlanes();
-      gscene.getManhattanDirections(scene);
-
-//      viewer.drawNormals (scene.normals, scene.fcloud);
-      viewer.drawPlaneTypesContour(scene.vPlanes);
-//      viewer.drawCloudsRandom(scene.vObstacles);
-      viewer.drawAxis(gscene.f2c);
-
-      if (scene.checkForStairs()) {
-        if (scene.getLevelsFromCandidates(scene.upstair,gscene.c2f)) {
-          scene.upstair.type = "up";
-          Plane best_step = scene.upstair.getBestStep();
-          scene.upstair.getInitialStairVolume(gscene.eigDx, best_step.eigDx, scene.has_manhattan);
-          scene.upstair.getInitialStepVertices();
-          gscene.f2s = scene.upstair.i2s * gscene.f2c;
-          double x,y,z,roll,pitch,yaw;
-          pcl::getTranslationAndEulerAngles (gscene.f2s, x, y, z, roll, pitch, yaw);
-          std::stringstream ss;
-          ss << "Ascending stairs at " << -z << "m and " << pitch*180/M_PI << "º";
-          viewer.cloud_viewer_.addText (ss.str(), 50, 50, 20, 1.0f, 1.0f, 1.0f, "uptext");
-          scene.upstair.getExactStepVertices();
-          viewer.drawFullAscendingStairUntil(scene.upstair,scene.upstair.vLevels.size(),scene.upstair.s2i);
-          viewer.drawStairAxis (scene.upstair, scene.upstair.type);
-//          viewer.drawStairs(scene.upstair,scene.upstair.type);
-
-          viewer.cloud_viewer_.addSphere(scene.upstair.initial_point,0.05f,"initial_point_up");
+        if (!gscene.initial_floor_) {
+            gscene.findFloor(scene.fcloud);
+            gscene.computeCamera2FloorMatrix(gscene.floor_normal_);
+            viewer.drawAxis(gscene.f2c);
         }
+        else {
+            scene.getNormalsNeighbors(16);
+            //      scene.getNormalsRadius(0.05f);
+            scene.regionGrowing();
+            scene.extractClusters(scene.remaining_points);
+            gscene.findFloorFast(scene.vPlanes);
+            if (gscene.new_floor_)
+                gscene.computeCamera2FloorMatrix(gscene.floor_normal_);
+            scene.getCentroids();
+            scene.getContours();
+            scene.getPlaneCoeffs2Floor(gscene.c2f);
+            scene.getCentroids2Floor(gscene.c2f);
+            scene.classifyPlanes();
+            gscene.getManhattanDirections(scene);
 
-        if (scene.getLevelsFromCandidates(scene.downstair,gscene.c2f)) {
-          scene.downstair.type = "down";
-          Plane best_step = scene.downstair.getBestStep();
-          scene.downstair.getInitialStairVolume(gscene.eigDx, best_step.eigDx, scene.has_manhattan);
-          scene.downstair.getInitialStepVertices();
-          gscene.f2s = scene.downstair.i2s * gscene.f2c;
-          double x,y,z,roll,pitch,yaw;
-          pcl::getTranslationAndEulerAngles (gscene.f2s, x, y, z, roll, pitch, yaw);
-          std::stringstream ss;
-          ss << "Descending stairs at " << -z << "m and " << pitch*180/M_PI << "º";
-          viewer.cloud_viewer_.addText (ss.str(), 50, 100, 20, 1.0f, 1.0f, 1.0f, "downtext");
-          scene.downstair.getExactStepVertices();
-          viewer.drawFullDescendingStairUntil(scene.downstair,scene.downstair.vLevels.size(),scene.downstair.s2i);
-          viewer.drawStairAxis (scene.downstair, scene.downstair.type);
+            //      viewer.drawNormals (scene.normals, scene.fcloud);
+            viewer.drawPlaneTypesContour(scene.vPlanes);
+            //      viewer.drawCloudsRandom(scene.vObstacles);
+            viewer.drawAxis(gscene.f2c);
 
-          viewer.cloud_viewer_.addSphere(scene.downstair.initial_point,0.05f,"initial_point_down");
 
+            if (scene.detectStairs()) {
+                if (scene.getLevelsFromCandidates(scene.upstair,gscene.c2f)) {
+                    scene.upstair.modelStaircase(gscene.main_dir, gscene.has_manhattan_);
+
+                    std::cout << "ASCENDING STAIRCASE\n" <<
+                                 " Steps = " << scene.upstair.vLevels.size()-1 <<
+                                 ", width = " << scene.upstair.step_width <<
+                                 "m, height = " << scene.upstair.step_height <<
+                                 "m, length = " << scene.upstair.step_length <<
+                                 "m\n Pose:\n" <<
+                                 scene.upstair.i2s.matrix() << std::endl << std::endl;
+                    if (scene.upstair.validateStaircase()) {
+                        viewer.addStairsText(scene.upstair.i2s, gscene.f2c, scene.upstair.type);
+                        viewer.drawFullAscendingStairUntil(scene.upstair,int(scene.upstair.vLevels.size()),scene.upstair.s2i);
+                        viewer.drawStairAxis (scene.upstair, scene.upstair.type);
+                    }
+                }
+
+                if (scene.getLevelsFromCandidates(scene.downstair,gscene.c2f)) {
+                    scene.downstair.modelStaircase(gscene.main_dir, gscene.has_manhattan_);
+
+                    std::cout << "DESCENDING STAIRCASE\n" <<
+                                 " Steps = " << scene.downstair.vLevels.size()-1 <<
+                                 ", width = " << scene.downstair.step_width <<
+                                 "m, height = " << scene.downstair.step_height <<
+                                 "m, length = " << scene.downstair.step_length <<
+                                 "m\n Pose:\n" <<
+                                 scene.downstair.i2s.matrix() << std::endl << std::endl;
+
+                    if (scene.downstair.validateStaircase()) {
+                        viewer.addStairsText(scene.downstair.i2s, gscene.f2c, scene.downstair.type);
+                        viewer.drawFullDescendingStairUntil(scene.downstair,int(scene.downstair.vLevels.size()),scene.downstair.s2i);
+                        viewer.drawStairAxis (scene.downstair, scene.downstair.type);
+                    }
+
+                }
+
+            }
 
         }
 
-      }
-      else {
-          viewer.cloud_viewer_.addText ("No ascending stairs", 50, 50, 20, 1.0f, 1.0f, 1.0f, "uptext");
-          viewer.cloud_viewer_.addText ("No descending stairs", 50, 100, 20, 1.0f, 1.0f, 1.0f, "downtext");
-      }
+
+        viewer.drawColorCloud(color_cloud,1);
+        // viewer.cloud_viewer_.spin();
+        viewer.cloud_viewer_.spinOnce();
 
     }
 
+    // ROS/RGB-D
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr color_cloud;
+    boost::shared_ptr<ros::AsyncSpinner> capture_;
 
-    viewer.drawColorCloud(color_cloud,1);
-//                viewer.cloud_viewer_.spin();
-    viewer.cloud_viewer_.spinOnce();
-
-  }
-
-  // ROS/RGB-D
-  boost::mutex data_ready_mutex_;
-  boost::condition_variable data_ready_cond_;
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr color_cloud;
-  boost::shared_ptr<ros::AsyncSpinner> capture_;
-
-  // RGB-D
-  ViewerStair viewer;
-  GlobalSceneStair gscene;
+    // RGB-D
+    ViewerStair viewer;
+    GlobalSceneStair gscene;
 
 };
 
-void parseArguments(int argc, char ** argv, int &capture_mode)
-{
-//std::cout << argc << std::endl;
 
+
+void parseArguments(int argc, char ** argv, int &capture_mode){
     capture_mode = 0;
     if (argc == 1) {
         capture_mode = 1; // From rosbag or live camera
     }
     else if (argc == 2) {
         if ((strcmp(argv[1], "h") == 0) or (strcmp(argv[1], "-h") == 0) or (strcmp(argv[1], "--h") == 0) or (strcmp(argv[1], "help") == 0) or (strcmp(argv[1], "-help") == 0) or (strcmp(argv[1], "--help") == 0)) {
-            std::cout << "USAGE" << std::endl;
-            std::cout << "./navegador_interiores_alejandro old : uses old openni driver with /camera/rgb/points as topic for the PointClouds" << std::endl;
-            std::cout << "./navegador_interiores_alejandro new : uses new openni2 driver with /camera/depth_registered/points as topic for the PointClouds" << std::endl;
-            std::cout << "./navegador_interiores_alejandro : uses new openni2 driver with /camera/depth_registered/points as topic for the PointClouds" << std::endl;
-            std::cout << "./navegador_interiores_alejandro pcd filename.pcd: loads PointCloud from filename.pcd" << std::endl;
+            sayHelp();
         }
     }
     else if (argc == 3) {
@@ -270,36 +263,35 @@ void parseArguments(int argc, char ** argv, int &capture_mode)
     }
 }
 
-int main(int argc, char* argv[])
-{
-  mainLoop app;
-  int capture_mode;
-  parseArguments(argc,argv,capture_mode);
+int main(int argc, char* argv[]) {
+    mainLoop app;
+    int capture_mode;
+    parseArguments(argc,argv,capture_mode);
 
-  if (capture_mode == 1) {
-      try {
-        app.startMainLoop(argc, argv);
-      }
-      catch (const std::bad_alloc& /*e*/)  {
-        cout << "Bad alloc" << endl;
-      }
-      catch (const std::exception& /*e*/)  {
-        cout << "Exception" << endl;
-      }
-  }
-  else {
-      if (argc > 2) {
-          try {
-            app.startPCD(argc, argv);
-          }
-          catch (const std::bad_alloc& /*e*/) {
+    if (capture_mode == 1) {
+        try {
+            app.startMainLoop(argc, argv);
+        }
+        catch (const std::bad_alloc& /*e*/)  {
             cout << "Bad alloc" << endl;
-          }
-          catch (const std::exception& /*e*/) {
+        }
+        catch (const std::exception& /*e*/)  {
             cout << "Exception" << endl;
-          }
-      }
-  }
+        }
+    }
+    else {
+        if (argc > 2) {
+            try {
+                app.startPCD(argc, argv);
+            }
+            catch (const std::bad_alloc& /*e*/) {
+                cout << "Bad alloc" << endl;
+            }
+            catch (const std::exception& /*e*/) {
+                cout << "Exception" << endl;
+            }
+        }
+    }
 
-  return 0;
+    return 0;
 }

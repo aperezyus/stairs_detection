@@ -30,111 +30,91 @@
 
 #include "RGBD/plane.h"
 
+// Parameters for height of the stairs:
+const float k_height_threshold = 0.05f;
+const float k_height_min = 0.13f - k_height_threshold;
+const float k_height_max = 0.185f + k_height_threshold;
+const float k_length_threshold = 0.05f;
+const float k_length_min = 0.13f - k_length_threshold;
+const float k_sum_min = 0.54f - 2*k_height_threshold - k_length_threshold;
+const float k_sum_max = 0.70f + 2*k_height_threshold + k_length_threshold;
+
 int neighbour_search(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, pcl::PointXYZ point, float radius, pcl::PointCloud<pcl::PointXYZ>::Ptr &neighbouring_cloud);
 int neighbour_search(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, pcl::PointXYZ point, float radius);
 
-//struct Step
-//{
-//	// Constructor with standard settings
-//	Step()
-//	{
-   
-//	}
-	
+class Stair {
+  public:
 
-	
-//	//~ int index;
-//	//~ float D;
-//	//~ float width;
-//	//~ float length;
-//	//~ int n_points;
-//	//~ float area;
-//	//~ int level;
-//	//~ Matrix3f dir;
-//	//~ float solidity;
-//	//~ pcl::PointXYZ center;
-	
-//	public:
-//	  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-//};
-
-
-//struct Level
-//{
-//	// Constructor with standard settings
-//	Level()
-//	{
-   
-//	}
-	
-//	//~ int level;
-//	//~ int type; // 0 = step, 1 = floor, 2 = virtual;
-//	//~ pcl::PointXYZ waypoint;
-//	//~ bool walkable;
-//	//~ std::vector<int> index;
-//	//~ float D;
-//	//~ float biggest_area;
-//	//~ int biggest_index;
-//	//~ Matrix3f dir; // .col(2) = width dir, .col(1) = length dir.
-//	//~ pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
-//	//~ pcl::PointXYZ centroid;
-//	//~ pcl::PointXYZ center;
-//	//~
-//	//~ float width;
-//	//~ float length;
-//	//~ float area;
-//	//~ float solidity;
-	
-//	public:
-//	  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-//};
-
-
-struct Stair
-{
     Stair()	{}
     ~Stair(){}
 	
+    //// Chooses the best step (as a type Plane) from all the planes found as the one that produces greater extent from all candidates
+    /// in: vLevels (from the detection stage)
+    /// returns: best_step (type Plane)
     Plane getBestStep ();
+
+    //// Given a step, compute the main_dir of the plane considering our axes convention (i.e. Z frontwards, Y upwards)
+    /// in: plane (a type Plane, used to find best_step))
+    /// out: plane.main_dir (oriented according to convention)
     void getStairDirFromPlane(Plane &plane);
+
+    //// Gets the first estimation of the staircase as a whole: length, width, height, pose and initial point
+    ///  Two methods are proposed, one standalone based on PCA, other using Manhattan dirs.
+    ///  This fuction computes both and chooses the best one.
+    /// in: manhattan_dirs (computed from GlobalScene), standalone_dirs (e.g. main_dirs from best_step), has_manhattan (to avoid compute manhattan)
+    /// out: (in class): i2s and s2i (pose from camera at pose i to stair and inverse), stair_dir (axes of the stair reference frame), width, length, height (of the staircase), center (of the cuboid volume)
+    void getInitialStairVolume(Eigen::Matrix3f manhattan_dirs, Eigen::Matrix3f standalone_dirs, bool has_manhattan);
+
+    //// Computes the 5 vertices of the step given following shape, with axes from stair_dir:
+    /// 0--------------1
+    /// |       z      |
+    /// |       |      |
+    /// |    x--4      |
+    /// |              |
+    /// 3--------------2
+    /// in: stair_dir, vLevels
+    /// out: vLevels.vertices
 	void getInitialStepVertices();
+
+    //// Computes the 5 vertices of the step given following shape, with axes from given dir:
+    /// 0--------------1
+    /// |       z      |
+    /// |       |      |
+    /// |    x--4      |
+    /// |              |
+    /// 3--------------2
+    /// in: dir (matrix, can be stair_dir), vLevels
+    /// out: vLevels.vertices
 	void getInitialStepVertices(Eigen::Matrix3f & dir);
-	// void getStepVertices(Eigen::Matrix3f c2m);
-//	void getClimbingStepVertices(Eigen::Affine3d & c2m);
-	void getInitialStairVolume(Eigen::Matrix3f manhattan_dirs, Eigen::Matrix3f standalone_dirs, bool has_manhattan);
+
+    //// Computes final vertices of the whole staircase, considering occlusions of the view, and averaging heights and lengths.
+    /// in: whole Stair class
+    /// out: vOrientedLevels, which are the vertices already oriented to be displayed in viewer.
 	void getExactStepVertices();
-	// old
-	// void getInitialStepVertices(Eigen::Matrix3f c2m);
-    //	void getInitialStairVolume();
-	
-	std::vector<Plane> vPlanes;
-	std::vector<Plane> vLevels;
-	std::vector<Plane> vOrientedLevels;
-	std::vector<Plane> vRisers;
-    Eigen::Matrix3f stair_dir;
-	Eigen::Affine3d i2s;
-	Eigen::Affine3d i2s_non_corrected;
-	Eigen::Affine3d s2i;
-	pcl::PointXYZ centroid;
-	pcl::PointXYZ center;
-	
-	float width;
-	float length;
-	float height;
-	
-	float step_width;
-	float step_length;
-	float step_height;
 
-	std::string type;
+    //// Function that executes all previously defined functions of the class at once, providing a final Stair object with all necessary elements
+    void modelStaircase(Eigen::Matrix3f main_dir, bool has_manhattan);
+
+    //// Function to validate staircase detection according to regulations measurements with threshold given above.
+    /// returns: true if valid measurements
+    bool validateStaircase();
 	
-    pcl::PointXYZ initial_point;
+    std::vector<Plane> vPlanes; // Step candidates given by the detection process
+    std::vector<Plane> vLevels; // Step candidates ordered in "levels" regarding their distance to the floor in steps
+    std::vector<Plane> vOrientedLevels; // Simple vector that includes final vertex values of the staircase (e.g. to plot)
+    std::vector<Plane> vRisers; // Includes final vertices but in this case for the risers (not used for computation)
+    Eigen::Matrix3f stair_dir; // Main directions of the staircase given our convention
+    Eigen::Affine3d i2s; // Transformation matrix to transform points from camera view (at frame "i") to stair coordinates
+    Eigen::Affine3d s2i; // Inverse of i2s
+    pcl::PointXYZ initial_point; // Point at the center of the edge of the first step, origin of stair reference frame
+	
+    float step_width; // Width of the step (from left to right when in front of it)
+    float step_length; // Length of the step (front to back)
+    float step_height; // Height of the step
 
-	int n_steps;
-	int step_im_on;
+    std::string type; // Can be "up" or "down" depending if it is ascending or descending staircase
 
-	public:
-	  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
 };
 
 #endif

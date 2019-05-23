@@ -22,23 +22,33 @@
 #include "stair/stair_classes.h"
 
 
-struct CurrentSceneStair : public CurrentScene
-{
 
-  CurrentSceneStair()
-  {
+class CurrentSceneStair : public CurrentScene {
+  public:
+    CurrentSceneStair(){
+        upstair.type = "up";
+        downstair.type = "down";
+    }
 
-  }
+    ~CurrentSceneStair(){}
 
-  ~CurrentSceneStair(){}
+    //// Goes through all horizontal planes and return positive if there are at least one valid first step
+    /// Step candidates are passed to Stair object (upstair and downstair at the same time)
+    /// in: vPlanes
+    /// out: stair.vPlanes
+    /// return true if there are first step candidate
+    bool detectStairs();
 
 
-  bool checkForStairs();
-  bool checkForStairsAbs();
-  bool getLevelsFromCandidates(Stair & stair, Eigen::Affine3d c2f);
+    //// Sorts step candidate regions in levels, being those a vector of Planes that are sorted using distance w.r.t. floor
+    /// in: Stair object to sort elements with, c2f (transformation matrix from camera to floor coordinates)
+    /// out: stair.vLevels
+    /// return true if valid staircase found
+    bool getLevelsFromCandidates(Stair & stair, Eigen::Affine3d c2f);
 
-  Stair downstair;
-  Stair upstair;
+    // Stair objects for down and up staircases. One for each implemented.
+    Stair downstair;
+    Stair upstair;
 
 };
 

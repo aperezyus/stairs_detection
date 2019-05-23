@@ -20,33 +20,37 @@
 
 #include "RGBD/global_scene.h"
 
-void GlobalScene::findFloor(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
-{
-    float z_dist = 2.0; // instead of using the whole cloud, start with the first z_dist meters in direction 'z'
+void GlobalScene::findFloor(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud) {
+    // To find the floor, instead of using the whole cloud,
+    // it starts with the first z_dist meters in direction 'z'.
+    // With this, the floor detected is always close to the person.
+    float z_dist = 1.0;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
     // Keep growing z_dist untill a reasonably large enough cloud is found
-    const int min_cloud_size = 200;
-    while (cloud_filtered->points.size() < min_cloud_size)	{
+    const int k_min_cluster_size = 200;
+    const float k_max_z_dist = 5.0;
+    const float k_z_dist_increase = 0.3f;
+    while (cloud_filtered->points.size() < k_min_cluster_size)	{
         pcl::PassThrough<pcl::PointXYZ> pass;
 		pass.setInputCloud(cloud);
 		pass.setFilterFieldName("z");
 		pass.setFilterLimits(0.0, z_dist);
 		pass.setFilterLimitsNegative (false);
 		pass.filter(*cloud_filtered);
-        if (z_dist > 5.0f)
-			break;
+        if (z_dist > k_max_z_dist)
+            break;
         else
-            z_dist+=0.3f;
+            z_dist += k_z_dist_increase;
 
 	}
 	
     // Once we have a filtered cloud, look for up to n_planes_try and evaluate if they met the conditions for valid floor
     int n_planes_try = 10;
 	
-    while ((!initial_floor) and (n_planes_try >= 0)) {
+    while ((!initial_floor_) and (n_planes_try >= 0)) {
         if (n_planes_try == 0) {
-            z_dist+=0.3f; // If none of the n_planes tried produces a valid initial_floor, increase the z_dist
-            if (z_dist > 10.0f)
+            z_dist += k_z_dist_increase; // If none of the n_planes tried produces a valid initial_floor, increase the z_dist
+            if (z_dist > k_max_z_dist)
 				break;
 
 			pcl::PassThrough<pcl::PointXYZ> pass;
@@ -58,7 +62,7 @@ void GlobalScene::findFloor(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
             n_planes_try = 10;
 		}
         else {
-            initial_floor = this->subtractInitialPlane(cloud_filtered, floor_normal);
+            initial_floor_ = this->subtractInitialPlane(cloud_filtered, floor_normal_);
             n_planes_try -= 1;
         }
     }
@@ -69,25 +73,30 @@ bool GlobalScene::subtractInitialPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr &clou
     // If valid floor is found, the coefficients are returned and the function returns true.
 
     bool initial_plane = false; // Will change to true if valid floor is found
+
+    const int k_min_plane_size = 50;
     
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>());
 	*cloud_filtered=*cloud;    
 	
-    if (cloud_filtered->points.size()>3){
-		// Create the segmentation object for the planar model and set all the parameters
-		pcl::SACSegmentation<pcl::PointXYZ> seg;
+    if (cloud_filtered->points.size()>3){ // Three points at least to find a plane
+        // Perform RANSAC segmentation
+        pcl::SACSegmentation<pcl::PointXYZ> seg;
 		pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
 		pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
 		seg.setOptimizeCoefficients (true);
 		seg.setModelType (pcl::SACMODEL_PLANE);
 		seg.setMethodType (pcl::SAC_RANSAC);
-		seg.setMaxIterations (100);
+        seg.setMaxIterations (100);
         seg.setDistanceThreshold (0.04); // aprox. Voxel size
 	
-		// Segment the largest planar component from the remaining cloud
+        // Segment the largest planar component from the cloud
 		seg.setInputCloud (cloud_filtered);
 		seg.segment (*inliers, *coefficients);
 		
+        if (inliers->indices.size() < k_min_plane_size)
+            return false;
+
         // Plane coefficients   Ax + By + Cz + D =0
         float A=(coefficients->values[0]);
         float B=(coefficients->values[1]);
@@ -104,11 +113,11 @@ bool GlobalScene::subtractInitialPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr &clou
         float angle = pcl::rad2deg(acos(dot));
 
         // Parameters to consider valid floor
-        const float angle_threshold = 45; // Valid threshold around estimated floor vector
-        const float min_D = 1.0f; // Minimum D value (i.e. minimum distance of the floor to the camera allowed)
-        const float max_D = 1.8f; // Maximum D value (i.e. maximum distance of the floor to the camera allowed)
+        const float k_angle_threshold = 45; // Valid threshold around estimated floor vector
+        const float k_min_D = 1.0f; // Minimum D value (i.e. minimum distance of the floor to the camera allowed)
+        const float k_max_D = 1.8f; // Maximum D value (i.e. maximum distance of the floor to the camera allowed)
 
-        if (angle < angle_threshold && fabs(D) > min_D && fabs(D) < max_D) {
+        if (angle < k_angle_threshold && fabs(D) > k_min_D && fabs(D) < k_max_D) {
             std::cout << "Floor found" << std::endl;
             std::cout << "Plane coefficients -> A: " << A << " B: " << B << " C: " << C << " D: " << D << std::endl;
             std::cout << "Angle with respect to the estimated vertical normal = " << angle << std::endl;
@@ -133,8 +142,8 @@ bool GlobalScene::subtractInitialPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr &clou
 	return (initial_plane);
 }
 
-void GlobalScene::computeCamera2FloorMatrix () {
-    // Transformation from Camera to Floor reference frame (c2f) is computed knowing one of the axis (the floor normal)
+void GlobalScene::computeCamera2FloorMatrix (Eigen::Vector4f floor_normal) {
+    // Transformation from Camera to Floor reference frame (c2f) is computed knowing one of the axis (the floor normal, corresponding to Y in our convention)
     Eigen::Matrix3f R;
     Eigen::Vector3f t = Eigen::Vector3f::Zero();
 
@@ -149,110 +158,90 @@ void GlobalScene::computeCamera2FloorMatrix () {
 
     c2f = ( Eigen::Translation3d (t.cast<double>()) * Eigen::AngleAxisd (R.cast<double>()));
     f2c = c2f.inverse();
-    person_height = float(fabs(c2f(1,3)));
+    person_height_ = float(fabs(c2f(1,3)));
 }
-
-
-void GlobalScene::computeCamera2AbsoluteMatrix(Eigen::Affine3d f2a) {
-  c2a = f2a*c2f;
-  a2c = c2a.inverse();
-}
-
-void GlobalScene::computeCamera2AbsoluteMatrixWithOdometry(Eigen::Affine3d c2c0) {
-  c2a = c02a*c2c0;
-  a2c = c2a.inverse();
-}
-
-void GlobalScene::computeIncrementalCamera2FloorMatrix () {
-	Eigen::Affine3d old_c2f = c2f;
-	
-    Eigen::Matrix3f R;
-    Eigen::Vector3f t = Eigen::Vector3f (0.f, 0.f, 0.f);
-    
-    float a,b,c,d;
-    
-    c = sqrt(1/(1+floor_normal(2)*floor_normal(2)/(floor_normal(1)*floor_normal(1))));
-    d = -c*floor_normal(2)/floor_normal(1);
-    b = 1/(floor_normal(0)+(c*floor_normal(1)*(c*floor_normal(1)-d*floor_normal(2)))/floor_normal(0)-(d*floor_normal(2)*(c*floor_normal(1)-d*floor_normal(2)))/floor_normal(0));
-    a = b*(c*floor_normal(1)-d*floor_normal(2))/floor_normal(0);
-        
-    R << a, -b*c, b*d, b, a*c, -a*d, 0, d, c;
-	t(1) = person_height;
-
-    c2f = ( Eigen::Translation3d (t.cast<double>()) * Eigen::AngleAxisd (R.cast<double>()));
-    f2c = c2f.inverse();
-    
-    
-    Eigen::Matrix3d rot1,rot2,rot3;
-    rot1 = old_c2f.rotation();
-    rot2 = f2c.rotation();
-    rot3 = rot1*rot2;
-    f2f = Eigen::Translation3d(Eigen::Vector3d(0,0,0)) * Eigen::AngleAxisd(rot3);
-
-}
-
-
 
 void GlobalScene::findFloorFast(std::vector<Plane> vPlanes) {
-    new_floor = false;
+    // Instead of performing a RANSAC each time, we can use the planes from region growing (computed in current scene)
+    new_floor_ = false;
     for (size_t Q=0; Q<vPlanes.size();Q++)	{
 
-        float dot = vPlanes[Q].coeffs.head<3>().dot(floor_normal.head<3>());
+        float dot = vPlanes[Q].coeffs.head<3>().dot(floor_normal_.head<3>());
         dot = ( dot < -1.0f ? -1.0f : ( dot > 1.0f ? 1.0f : dot ) );
+        float angle = pcl::rad2deg(acos(dot));
 
-        // Threshold to consider new valid floor
-        const float angle_threshold = 15; // degrees with respect to previous floor_normal
-        const float D_threshold = 0.08f; // Distance to camera with respect to previous D
+        // Threshold to consider vPlanes[Q] a new valid floor
+        const float k_angle_threshold = 15; // degrees with respect to previous floor_normal
+        const float k_D_threshold = 0.08f; // Distance to camera with respect to previous D
 
-        if ((pcl::rad2deg(acos(dot)) < angle_threshold) and (fabs(fabs(vPlanes[Q].coeffs[3])-fabs(floor_normal[3]))<=D_threshold)) {
-            floor_normal = vPlanes[Q].coeffs;
-            new_floor = true;
-            current_floor = int(Q);
+        if ((angle < k_angle_threshold) and (fabs(fabs(vPlanes[Q].coeffs[3])-fabs(floor_normal_[3]))<=k_D_threshold)) {
+            floor_normal_ = vPlanes[Q].coeffs;
+            new_floor_ = true;
             break;
 		}
 	}
 }
 
+void GlobalScene::getManhattanDirections(CurrentScene &scene) {
+    // Given current scene, compute Manhattan
+
+    if (new_floor_) {  // In findFloorFast has found a new floor, perform computation assuming known Y
+        std::cout << "Planes W Floor" << std::endl;
+        scene.getManhattanDirectionsFromPlanesWithFloor(f2c);
+    }
+
+    if (scene.has_manhattan_ == false) { // if previous function did not work, just use planes
+        scene.getManhattanDirectionsFromPlanes();
+        std::cout << "Planes" << std::endl;
+
+
+        if (scene.has_manhattan_ == false) // If still not enough information, use normals
+            std::cout << "Normals" << std::endl;
+            scene.getManhattanDirectionsFromNormals();
+    }
+
+    if (scene.has_manhattan_)  {
+        updateManhattanDirections(scene.main_dir);
+        updateFloorWithManhattan();
+    }
+}
+
 void GlobalScene::updateManhattanDirections(Eigen::Matrix3f manhattan_dirs) {
-    if (!has_manhattan) {  // If manhattan has never been found, set eigDx
-        eigDx = manhattan_dirs;
-        has_manhattan = true;
+    if (!has_manhattan_) {  // If manhattan has never been found, set main_dir
+        main_dir = manhattan_dirs;
+        has_manhattan_ = true;
     }
     else {
 
         // Get the angle (as a turn in Y) of Z axis (in floor reference) from old to new reference
-        double angle_z = double(acos(manhattan_dirs.col(2).dot(eigDx.col(2))));
-        Eigen::Vector3f cross_z = manhattan_dirs.col(2).cross(eigDx.col(2));
-        if (eigDx.col(1).dot(cross_z) < 0) { // Or > 0
+        double angle_z = double(acos(manhattan_dirs.col(2).dot(main_dir.col(2))));
+        Eigen::Vector3f cross_z = manhattan_dirs.col(2).cross(main_dir.col(2));
+        if (main_dir.col(1).dot(cross_z) < 0) { // Or > 0
           angle_z = -angle_z;
         }
 
 
-        // Keep the axis equally oriented (i.e. Z and X pointing at the same points) even if you move around
-        // Figure in which quadrant the angle_z is, and change eigDx in consonance
-        if (angle_z >= M_PI_4 && angle_z < 3*M_PI_4)
-        {
-            eigDx.col(0) = -manhattan_dirs.col(2);
-            eigDx.col(1) = manhattan_dirs.col(1);
-            eigDx.col(2) = manhattan_dirs.col(0);
+        // Keep the axis equally oriented (i.e. Z and X pointing at the same direction) even if you move around
+        // Figure in which quadrant the angle_z is, and change main_dir accordingly
+        if (angle_z >= M_PI_4 && angle_z < 3*M_PI_4) {
+            main_dir.col(0) = -manhattan_dirs.col(2);
+            main_dir.col(1) = manhattan_dirs.col(1);
+            main_dir.col(2) = manhattan_dirs.col(0);
         }
-        else if (angle_z >= 3*M_PI_4 || angle_z <= -3*M_PI_4)
-        {
-            eigDx.col(0) = -manhattan_dirs.col(0);
-            eigDx.col(1) = manhattan_dirs.col(1);
-            eigDx.col(2) = -manhattan_dirs.col(2);
+        else if (angle_z >= 3*M_PI_4 || angle_z <= -3*M_PI_4) {
+            main_dir.col(0) = -manhattan_dirs.col(0);
+            main_dir.col(1) = manhattan_dirs.col(1);
+            main_dir.col(2) = -manhattan_dirs.col(2);
         }
-        else if (angle_z > -3*M_PI_4 && angle_z < -M_PI_4)
-        {
-            eigDx.col(0) = manhattan_dirs.col(2);
-            eigDx.col(1) = manhattan_dirs.col(1);
-            eigDx.col(2) = -manhattan_dirs.col(0);
+        else if (angle_z > -3*M_PI_4 && angle_z < -M_PI_4) {
+            main_dir.col(0) = manhattan_dirs.col(2);
+            main_dir.col(1) = manhattan_dirs.col(1);
+            main_dir.col(2) = -manhattan_dirs.col(0);
         }
-        else
-        {
-            eigDx.col(0) = manhattan_dirs.col(0);
-            eigDx.col(1) = manhattan_dirs.col(1);
-            eigDx.col(2) = manhattan_dirs.col(2);
+        else {
+            main_dir.col(0) = manhattan_dirs.col(0);
+            main_dir.col(1) = manhattan_dirs.col(1);
+            main_dir.col(2) = manhattan_dirs.col(2);
 
         }
 
@@ -260,27 +249,10 @@ void GlobalScene::updateManhattanDirections(Eigen::Matrix3f manhattan_dirs) {
 }
 
 void GlobalScene::updateFloorWithManhattan() {
-    floor_normal.head<3>() = eigDx.col(1);
-    c2f.matrix().block<3,3>(0,0) = eigDx.cast<double>().transpose();
+    floor_normal_.head<3>() = main_dir.col(1);
+    c2f.matrix().block<3,3>(0,0) = main_dir.cast<double>().transpose();
     f2c = c2f.inverse();
 }
 
 
-void GlobalScene::getManhattanDirections(CurrentScene &scene) {
 
-    if (new_floor) {  // In findFloorFast has found a new floor
-        scene.getManhattanDirectionsFromPlanesWithFloor(f2c);
-    }
-
-    if (scene.has_manhattan == false) { // if previous function did not work
-        scene.getManhattanDirectionsFromPlanes();
-
-        if (scene.has_manhattan == false)
-            scene.getManhattanDirectionsFromNormals();
-    }
-
-    if (scene.has_manhattan)  {
-        updateManhattanDirections(scene.eigDx);
-        updateFloorWithManhattan();
-    }
-}

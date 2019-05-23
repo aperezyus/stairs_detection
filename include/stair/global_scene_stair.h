@@ -20,23 +20,17 @@
 
 #include "stair/stair_classes.h"
 #include "RGBD/global_scene.h"
-//#include "custom_functions.h"
 
-struct GlobalSceneStair : public GlobalScene
-{
-  GlobalSceneStair()
-  {
-
+class GlobalSceneStair : public GlobalScene {
+public :
+  GlobalSceneStair()  {
     climbing = false;
     p2m.setIdentity();
-
-
   }
 
   bool findFloorFastClimbing(std::vector<Plane> vPlanes);
   bool findVerticalFast(std::vector<Plane> vPlanes);
   void updateFloorNormalWithOdo(Eigen::Affine3d pose);
-
 
   // Stair odometry
   bool climbing;

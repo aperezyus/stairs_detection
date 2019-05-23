@@ -41,6 +41,7 @@ struct ViewerStair : public Viewer
   void drawFullAscendingStairUntil (Stair stair, int level, Eigen::Affine3d s2p);
   void drawFullAscendingStairUntil (Stair stair, int level, Eigen::Affine3d s2p, Eigen::Affine3d pose);
   void drawFullDescendingStairUntil (Stair stair, int level, Eigen::Affine3d s2p);
+  void addStairsText (Eigen::Affine3d i2s, Eigen::Affine3d f2c, std::string type);
 
 
 

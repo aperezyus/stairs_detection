@@ -23,7 +23,7 @@
 Plane Stair::getBestStep(){
   // We chose the "best step" as the one that maximizes the extent
   // (i.e. ratio between contour area and bounding rectangle) in all steps at the same time
-  // Thus, we compute the main directions of the step (eigDx) and sum the rectangle area of all steps following that direction
+  // Thus, we compute the main directions of the step (main_dir) and sum the rectangle area of all steps following that direction
 
   size_t index = 0;
   float max_extent = 0;
@@ -33,14 +33,14 @@ Plane Stair::getBestStep(){
       sum_of_contour_areas += vLevels[Q].getContourArea();
 
   for (size_t Q = 1; Q<vLevels.size(); Q++) {
-    if (vLevels[Q].eigDx.isZero(0))
+    if (vLevels[Q].main_dir.isZero(0))
       vLevels[Q].getPrincipalDirections();
 
     getStairDirFromPlane(vLevels[Q]);
 
     float sum_of_rectangle_areas = 0;
     for (size_t P = 1; P<vLevels.size(); P++)
-      sum_of_rectangle_areas += vLevels[P].getRectangleArea(vLevels[Q].eigDx);
+      sum_of_rectangle_areas += vLevels[P].getRectangleArea(vLevels[Q].main_dir);
 
     float extent = sum_of_contour_areas/sum_of_rectangle_areas;
 
@@ -60,9 +60,9 @@ void Stair::getStairDirFromPlane(Plane &plane) {
   // Second the one with intermediate eigenvalue (corresponding to length --> Z)
   // Third, the one with larger eigenvalue (corresponding to width --> X)
 
-  Eigen::Vector3f dx = plane.eigDx.col(2);
-  Eigen::Vector3f dy = plane.eigDx.col(0);
-  Eigen::Vector3f dz = plane.eigDx.col(1);
+  Eigen::Vector3f dx = plane.main_dir.col(2);
+  Eigen::Vector3f dy = plane.main_dir.col(0);
+  Eigen::Vector3f dz = plane.main_dir.col(1);
 
   // Check that Y go upwards, and Z frontwards
   if (dy(1) > 0)
@@ -71,11 +71,9 @@ void Stair::getStairDirFromPlane(Plane &plane) {
       dz = -dz;
   dx = dy.cross(dz);
 
-  plane.eigDx << dx, dy, dz;
+  plane.main_dir << dx, dy, dz;
 
 }
-
-
 
 void Stair::getInitialStairVolume(Eigen::Matrix3f manhattan_dirs, Eigen::Matrix3f standalone_dirs, bool has_manhattan) {
     // We have two options to obtain the model of the staircase:
@@ -93,14 +91,13 @@ void Stair::getInitialStairVolume(Eigen::Matrix3f manhattan_dirs, Eigen::Matrix3
 
 	Eigen::Vector4f vector_centroid;
 	pcl::compute3DCentroid(*allPoints,vector_centroid);
-	centroid = pcl::PointXYZ (vector_centroid[0], vector_centroid[1], vector_centroid[2]);
 	
     // 1. PCA Method
 //    this->getInitialStepVertices(standalone_dirs); // This recovers the vertices of each level
 
     // Transform points to a reference system centered in the centroid of the volume
     Eigen::Matrix3d rotation_standalone = standalone_dirs.transpose().cast<double>();
-    Eigen::Vector3d translation_standalone = -1 * (rotation_standalone * centroid.getVector3fMap().cast<double>());
+    Eigen::Vector3d translation_standalone = -1 * (rotation_standalone * vector_centroid.head<3>().cast<double>());
     Eigen::Affine3d i2s_standalone = ( Eigen::Translation3d (translation_standalone) * Eigen::AngleAxisd (rotation_standalone));
     pcl::PointCloud<pcl::PointXYZ> cPoints_standalone;
     pcl::transformPointCloud(*allPoints, cPoints_standalone, i2s_standalone);
@@ -115,6 +112,8 @@ void Stair::getInitialStairVolume(Eigen::Matrix3f manhattan_dirs, Eigen::Matrix3
     float height_standalone = fabs(max_pt_standalone.y - min_pt_standalone.y);
     float length_standalone = fabs(max_pt_standalone.z - min_pt_standalone.z);   
     float volume_standalone = width_standalone*height_standalone*length_standalone;
+
+    float width, length, height;
 
 
     if (has_manhattan) {   // If scene has Manhattan
@@ -139,7 +138,7 @@ void Stair::getInitialStairVolume(Eigen::Matrix3f manhattan_dirs, Eigen::Matrix3
 
         // Repeat as in 1
 		Eigen::Matrix3d rotation_manhattan = manhattan_dirs.transpose().cast<double>();
-		Eigen::Vector3d translation_manhattan = -1 * (rotation_manhattan * centroid.getVector3fMap().cast<double>());
+        Eigen::Vector3d translation_manhattan = -1 * (rotation_manhattan * vector_centroid.head<3>().cast<double>());
 		Eigen::Affine3d i2s_manhattan = ( Eigen::Translation3d (translation_manhattan) * Eigen::AngleAxisd (rotation_manhattan));
 		pcl::PointCloud<pcl::PointXYZ> cPoints_manhattan;
 	    pcl::transformPointCloud(*allPoints, cPoints_manhattan, i2s_manhattan);
@@ -194,8 +193,7 @@ void Stair::getInitialStairVolume(Eigen::Matrix3f manhattan_dirs, Eigen::Matrix3
     
     // Compute center of the volume (not centroid but the center of the cube) (..actually not cube, parallelogram, you get the point)
     const Eigen::Vector3f mean_diag = 0.5f*(max_pt.getVector3fMap() + min_pt.getVector3fMap());
-	Eigen::Vector3f mean_diag_absolute = stair_dir*mean_diag+ centroid.getVector3fMap().head<3>();
-    center = pcl::PointXYZ (mean_diag_absolute[0], mean_diag_absolute[1], mean_diag_absolute[2]);
+    Eigen::Vector3f mean_diag_absolute = stair_dir*mean_diag+ vector_centroid.head<3>();
 
     // Compute the initial point of the staircase: will be the center of the edge of the first step.
     // Since we have not included floor (level 0), it is directly the edge of the parallelogram.
@@ -249,10 +247,13 @@ void Stair::getExactStepVertices() {
         }
     }
 
+
     if (vOrientedLevels.size() == 0) {// There is no floor or it is not connected, then just add empty plane to oriented levels
         Plane temp_plane;
         temp_plane.vertices.reset(new pcl::PointCloud<pcl::PointXYZ>);
         vOrientedLevels.push_back(temp_plane);
+        vLevels[0].vertices.reset(new pcl::PointCloud<pcl::PointXYZ>);
+
     }
 
     // Initial point/s2i slight correction.
@@ -293,7 +294,8 @@ void Stair::getExactStepVertices() {
         s2i = i2s.inverse();
 
         // Correct vOrientedLevels at zero
-        pcl::transformPointCloud(*vLevels[0].vertices, *vOrientedLevels[0].vertices, i2s);
+        if (vLevels[0].cloud->points.size() > 0)
+            pcl::transformPointCloud(*vLevels[0].vertices, *vOrientedLevels[0].vertices, i2s);
     }
 
     // The final length and height will be averaged, thus we need to cumulate
@@ -304,30 +306,6 @@ void Stair::getExactStepVertices() {
 	
     for (size_t Q=1; Q<vLevels.size(); Q++)	{
 
-//        if ((Q == 0) and (vLevels[0].cloud->points.size() > 0))  {   // Level 0 (floor) IF there is in the image
-//			pcl::PointCloud<pcl::PointXYZ>::Ptr neighbouring_cloud (new pcl::PointCloud<pcl::PointXYZ>);
-//            // Check if there are points (at least 5, for example) in around half a meter from initial point of the stair
-//            if (neighbour_search(vLevels[0].cloud, initial_point, 0.5f, neighbouring_cloud) > 5) {
-//				vLevels[Q].cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
-//                *vLevels[Q].cloud = *neighbouring_cloud; // Instead of using the whole cloud, use just the neighbouring cloud
-//				vLevels[Q].getCentroid();
-//				vLevels[Q].getMeasurements(stair_dir,neighbouring_cloud);
-//				vLevels[Q].width = step_width;
-//				vLevels[Q].getVertices(stair_dir);
-				
-//                // Add level 0 to oriented levels (in staircase coordinates)
-//				Plane temp_plane;
-//                temp_plane.vertices.reset(new pcl::PointCloud<pcl::PointXYZ>);
-//				pcl::transformPointCloud(*vLevels[Q].vertices, *temp_plane.vertices, i2s);
-//				vOrientedLevels.push_back(temp_plane);
-//			}
-//            else { // Floor is not connected, then just add empty plane to oriented levels
-//				Plane temp_plane;
-//				temp_plane.vertices.reset(new pcl::PointCloud<pcl::PointXYZ>);
-//				vOrientedLevels.push_back(temp_plane);
-//			}
-//		}
-//        else
         if (Q > 0) {
 			vLevels[Q].width = step_width;
 
@@ -336,16 +314,8 @@ void Stair::getExactStepVertices() {
 			temp_plane.vertices.reset(new pcl::PointCloud<pcl::PointXYZ>);
             pcl::transformPointCloud(*vLevels[Q].vertices, *temp_plane.vertices, i2s);
 			vOrientedLevels.push_back(temp_plane);
-
-		}
-//        else { // If this is level 0 but there is not floor in the image
-//			Plane temp_plane;
-//			temp_plane.vertices.reset(new pcl::PointCloud<pcl::PointXYZ>);
-//			vOrientedLevels.push_back(temp_plane);
-//		}
+        }
 		
-
-
 
         // Corrections of height and length
         if ((Q>1) or ((Q == 1) and (vOrientedLevels[0].vertices->points.size() > 0))){
@@ -375,16 +345,17 @@ void Stair::getExactStepVertices() {
 		}
 		// WIDTH CORRECTION
         if (vOrientedLevels[Q].vertices->points.size() > 0)	{
-			vOrientedLevels[Q].vertices->points[0].x = width/2;
-			vOrientedLevels[Q].vertices->points[1].x = -width/2;
-			vOrientedLevels[Q].vertices->points[2].x = -width/2;
-			vOrientedLevels[Q].vertices->points[3].x = width/2;
+            vOrientedLevels[Q].vertices->points[0].x = step_width/2;
+            vOrientedLevels[Q].vertices->points[1].x = -step_width/2;
+            vOrientedLevels[Q].vertices->points[2].x = -step_width/2;
+            vOrientedLevels[Q].vertices->points[3].x = step_width/2;
 			vOrientedLevels[Q].vertices->points[4].x = 0;
 		}
 	}
 	
 	step_height = fabs(cumulated_height/n_height);
     if (n_length > 0) {
+
         step_length = cumulated_length/n_length;
 	
 		// Correction of vertices in case of first step and no floor in descending staircase or last step in ascending staircase
@@ -413,7 +384,6 @@ void Stair::getExactStepVertices() {
 		Plane temp_plane;
 		temp_plane.vertices.reset(new pcl::PointCloud<pcl::PointXYZ>);
         if (Q == 1) {
-
 			temp_plane.vertices->points.push_back(vOrientedLevels[Q].vertices->points[3]);
 			temp_plane.vertices->points.push_back(vOrientedLevels[Q].vertices->points[2]);
 			temp_plane.vertices->points.push_back(pcl::PointXYZ(vOrientedLevels[Q].vertices->points[2].x,vOrientedLevels[Q].vertices->points[2].y-step_height,vOrientedLevels[Q].vertices->points[2].z));
@@ -426,8 +396,7 @@ void Stair::getExactStepVertices() {
 			temp_plane.vertices->points.push_back(vOrientedLevels[Q].vertices->points[2]);
 			temp_plane.vertices->points.push_back(vOrientedLevels[Q].vertices->points[3]);
 			temp_plane.vertices->points.push_back(pcl::PointXYZ(0,(vOrientedLevels[Q].vertices->points[0].y+vOrientedLevels[Q-1].vertices->points[0].y)/2,vOrientedLevels[Q].vertices->points[0].z));
-		}
-		
+		}		
 		vRisers.push_back(temp_plane);
 
 		pcl::transformPointCloud(*vRisers[Q].vertices,*vRisers[Q].vertices,s2i);
@@ -440,7 +409,38 @@ void Stair::getExactStepVertices() {
     
 }
 
+bool Stair::validateStaircase() {
 
+    bool valid = true;
+
+    if (step_length < k_length_min) {
+        std::cout << "INVALID STAIRCASE, LENGTH IS SMALLER THAN MINIMUM" << std::endl;
+        return false;
+    }
+
+    if (step_height < k_height_min || step_height > k_height_max) {
+        std::cout << "INVALID STAIRCASE, HEIGHT IS NOT VALID" << std::endl;
+        return false;
+    }
+
+    float sum = 2*step_height + step_length;
+
+    if (sum < k_sum_min || sum > k_sum_max) {
+        std::cout << "INVALID STAIRCASE, SUM OF LENGTH AND HEIGHT IS NOT VALID" << std::endl;
+        return false;
+    }
+
+    return valid;
+}
+
+void Stair::modelStaircase(Eigen::Matrix3f main_dir, bool has_manhattan){
+    Plane best_step = this->getBestStep();
+    this->getInitialStairVolume(main_dir, best_step.main_dir, has_manhattan);
+    this->getInitialStepVertices();
+    this->getExactStepVertices();
+
+
+}
 
 
 int neighbour_search(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, pcl::PointXYZ point, float radius, pcl::PointCloud<pcl::PointXYZ>::Ptr &neighbouring_cloud)
