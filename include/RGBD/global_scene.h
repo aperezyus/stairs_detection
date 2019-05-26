@@ -54,6 +54,9 @@ class GlobalScene {
 
 	}
 
+    //// Resets the object
+    void reset();
+
 
     //// Finds the floor in scene from given point cloud
     /// in: cloud (Pointcloud to find the floor)
@@ -105,7 +108,6 @@ class GlobalScene {
     Eigen::Matrix3f main_dir; // Principal directions (Manhattan directions) on the global scene
 
 	
-//	  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
 #endif

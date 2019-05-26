@@ -18,17 +18,15 @@
 * along with stairs_detection. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef VISUALIZER_STAIR_H
+#define VISUALIZER_STAIR_H
+
 #include "stair/stair_classes.h"
 #include "RGBD/visualizer.h"
-//#include "custom_functions.h"
 
 struct ViewerStair : public Viewer
 {
-  ViewerStair()
-  {
-
-
-  }
+    ViewerStair() {}
 
 
   void drawStairAxis (Stair stair, std::string stair_type);
@@ -46,3 +44,5 @@ struct ViewerStair : public Viewer
 
 
 };
+
+#endif

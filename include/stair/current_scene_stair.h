@@ -18,6 +18,10 @@
 * along with stairs_detection. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef CURRENT_SCENE_STAIR_H
+#define CURRENT_SCENE_STAIR_H
+
+
 #include "RGBD/current_scene.h"
 #include "stair/stair_classes.h"
 
@@ -53,3 +57,4 @@ class CurrentSceneStair : public CurrentScene {
 };
 
 
+#endif

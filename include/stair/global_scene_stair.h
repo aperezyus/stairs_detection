@@ -18,6 +18,9 @@
 * along with stairs_detection. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef GLOBAL_SCENE_STAIR_H
+#define GLOBAL_SCENE_STAIR_H
+
 #include "stair/stair_classes.h"
 #include "RGBD/global_scene.h"
 
@@ -58,3 +61,6 @@ public :
   std::vector<int> vStepImOnLength;
   std::vector<int> vStepImOnHeight;
 };
+
+
+#endif

@@ -37,12 +37,11 @@
 #include "RGBD/plane.h"
 
 class Viewer {
-  public:
-    Viewer() : cloud_viewer_ ("Viewer")
-    {
+public:
+    Viewer() : cloud_viewer_ ("Viewer")   {
         cloud_viewer_.setBackgroundColor (0, 0, 0); // black
         // cloud_viewer_.setBackgroundColor (255, 255, 255); // white
-        // cloud_viewer_.addCoordinateSystem (1.0);
+        //         cloud_viewer_.addCoordinateSystem (1.0);
 
         // Configuration so first view looks like an image
         cloud_viewer_.setPosition (0, 0);

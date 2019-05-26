@@ -29,11 +29,11 @@
 #include <pcl/common/common_headers.h>
 
 #include <pcl/surface/concave_hull.h>
-#include <pcl/surface/convex_hull.h>
+//#include <pcl/surface/convex_hull.h>
 #include <pcl/filters/project_inliers.h>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/ModelCoefficients.h>
-#include <pcl/filters/voxel_grid.h>
+//#include <pcl/filters/voxel_grid.h>
 
 
 class Plane {

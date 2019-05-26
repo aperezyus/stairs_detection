@@ -20,6 +20,21 @@
 
 #include "RGBD/global_scene.h"
 
+
+void GlobalScene::reset(){
+    c2f.setIdentity();
+    f2c.setIdentity();
+    main_dir.setIdentity();
+
+    initial_floor_ = false;
+    new_floor_ = false;
+    has_manhattan_ = false;
+
+    floor_normal_ = Eigen::Vector4f::Zero();
+    person_height_ = 0;
+
+}
+
 void GlobalScene::findFloor(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud) {
     // To find the floor, instead of using the whole cloud,
     // it starts with the first z_dist meters in direction 'z'.
@@ -27,9 +42,10 @@ void GlobalScene::findFloor(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud) {
     float z_dist = 1.0;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
     // Keep growing z_dist untill a reasonably large enough cloud is found
-    const int k_min_cluster_size = 200;
+    const int k_min_cluster_size = 500;
     const float k_max_z_dist = 5.0;
-    const float k_z_dist_increase = 0.3f;
+    const float k_z_dist_increase = 0.1f;
+
     while (cloud_filtered->points.size() < k_min_cluster_size)	{
         pcl::PassThrough<pcl::PointXYZ> pass;
 		pass.setInputCloud(cloud);
@@ -45,7 +61,8 @@ void GlobalScene::findFloor(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud) {
 	}
 	
     // Once we have a filtered cloud, look for up to n_planes_try and evaluate if they met the conditions for valid floor
-    int n_planes_try = 10;
+    const int k_n_planes_try = 5;
+    int n_planes_try = k_n_planes_try;
 	
     while ((!initial_floor_) and (n_planes_try >= 0)) {
         if (n_planes_try == 0) {
@@ -59,7 +76,7 @@ void GlobalScene::findFloor(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud) {
 			pass.setFilterLimits(0.0, z_dist);
 			pass.filter(*cloud_filtered);
 
-            n_planes_try = 10;
+            n_planes_try = k_n_planes_try;
 		}
         else {
             initial_floor_ = this->subtractInitialPlane(cloud_filtered, floor_normal_);
@@ -74,12 +91,13 @@ bool GlobalScene::subtractInitialPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr &clou
 
     bool initial_plane = false; // Will change to true if valid floor is found
 
-    const int k_min_plane_size = 50;
+    const int k_min_plane_size = 300;
+    const float k_min_percentage_size = 0.30f;
     
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>());
 	*cloud_filtered=*cloud;    
 	
-    if (cloud_filtered->points.size()>3){ // Three points at least to find a plane
+    if (cloud_filtered->points.size()>k_min_plane_size){ // Three points at least to find a plane
         // Perform RANSAC segmentation
         pcl::SACSegmentation<pcl::PointXYZ> seg;
 		pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
@@ -88,44 +106,49 @@ bool GlobalScene::subtractInitialPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr &clou
 		seg.setModelType (pcl::SACMODEL_PLANE);
 		seg.setMethodType (pcl::SAC_RANSAC);
         seg.setMaxIterations (100);
-        seg.setDistanceThreshold (0.04); // aprox. Voxel size
+        seg.setDistanceThreshold (0.02); // aprox. Voxel size / 2
 	
         // Segment the largest planar component from the cloud
 		seg.setInputCloud (cloud_filtered);
-		seg.segment (*inliers, *coefficients);
-		
-        if (inliers->indices.size() < k_min_plane_size)
-            return false;
+        seg.segment (*inliers, *coefficients);
 
-        // Plane coefficients   Ax + By + Cz + D =0
-        float A=(coefficients->values[0]);
-        float B=(coefficients->values[1]);
-        float C=(coefficients->values[2]);
-        float D=(coefficients->values[3]);
+        // Either the plane is very large (at least k_min_plane_size points) or less size but occupying large part of the scene (high percentage of the initial cloud)
+        if (inliers->indices.size() > k_min_plane_size ||
+                (inliers->indices.size() > float(k_min_plane_size)*k_min_percentage_size && float(inliers->indices.size())/float(cloud_filtered->points.size()) > k_min_percentage_size)) {
 
-        if (D < 0) {A = -A; B = -B; C = -C; D = -D;} // To get the plane normal looking towards the origin
+            // Plane coefficients   Ax + By + Cz + D =0
+            float A=(coefficients->values[0]);
+            float B=(coefficients->values[1]);
+            float C=(coefficients->values[2]);
+            float D=(coefficients->values[3]);
 
-        Eigen::Vector3f v_plane(A,B,C);
-        Eigen::Vector3f v_floor(0.0f, -sin(float(M_PI_4)), -sin(float(M_PI_4))); // Estimated position of the floor normal considering the camera is looking downwards, circa 45 degrees
+            if (D < 0) {A = -A; B = -B; C = -C; D = -D;} // To get the plane normal looking towards the origin
 
-        float dot = v_plane.dot(v_floor);
-        dot = ( dot < -1.0f ? -1.0f : ( dot > 1.0f ? 1.0f : dot ) ); // to avoid NaNs
-        float angle = pcl::rad2deg(acos(dot));
+            Eigen::Vector3f v_plane(A,B,C);
+            Eigen::Vector3f v_floor(0.0f, -sin(float(M_PI_4)), -sin(float(M_PI_4))); // Estimated position of the floor normal considering the camera is looking downwards, circa 45 degrees
 
-        // Parameters to consider valid floor
-        const float k_angle_threshold = 45; // Valid threshold around estimated floor vector
-        const float k_min_D = 1.0f; // Minimum D value (i.e. minimum distance of the floor to the camera allowed)
-        const float k_max_D = 1.8f; // Maximum D value (i.e. maximum distance of the floor to the camera allowed)
+            float dot = v_plane.dot(v_floor);
+            dot = ( dot < -1.0f ? -1.0f : ( dot > 1.0f ? 1.0f : dot ) ); // to avoid NaNs
+            float angle = pcl::rad2deg(acos(dot));
 
-        if (angle < k_angle_threshold && fabs(D) > k_min_D && fabs(D) < k_max_D) {
-            std::cout << "Floor found" << std::endl;
-            std::cout << "Plane coefficients -> A: " << A << " B: " << B << " C: " << C << " D: " << D << std::endl;
-            std::cout << "Angle with respect to the estimated vertical normal = " << angle << std::endl;
-            std::cout << "Plane contains " << inliers->indices.size() << " points" << std::endl;
+            // Parameters to consider valid floor
+            const float k_angle_threshold = 30; // Valid threshold around estimated floor vector
+            const float k_min_D = 1.0f; // Minimum D value (i.e. minimum distance of the floor to the camera allowed)
+            const float k_max_D = 1.8f; // Maximum D value (i.e. maximum distance of the floor to the camera allowed)
 
-            normal = Eigen::Vector4f(A,B,C,D);
+            if (angle < k_angle_threshold && fabs(D) > k_min_D && fabs(D) < k_max_D) {
+//                std::cout << std::endl <<"-- Floor found --" << std::endl;
+//                std::cout << "Plane coefficients -> A: " << A << " B: " << B << " C: " << C << " D: " << D << std::endl;
+//                std::cout << "Angle with respect to the estimated vertical normal = " << angle << std::endl;
+//                std::cout << "Plane contains " << inliers->indices.size() << " points" << std::endl << std::endl;
 
-            initial_plane = true;
+                normal = Eigen::Vector4f(A,B,C,D);
+
+                initial_plane = true;
+            }
+        }
+        else {
+            initial_plane = false;
         }
 
         // If no initial_plane found, return cloud with remaining points
@@ -163,16 +186,17 @@ void GlobalScene::computeCamera2FloorMatrix (Eigen::Vector4f floor_normal) {
 
 void GlobalScene::findFloorFast(std::vector<Plane> vPlanes) {
     // Instead of performing a RANSAC each time, we can use the planes from region growing (computed in current scene)
+
+    // Threshold to consider vPlanes[Q] a new valid floor
+    const float k_angle_threshold = 15; // degrees with respect to previous floor_normal
+    const float k_D_threshold = 0.08f; // Distance to camera with respect to previous D
+
     new_floor_ = false;
     for (size_t Q=0; Q<vPlanes.size();Q++)	{
 
         float dot = vPlanes[Q].coeffs.head<3>().dot(floor_normal_.head<3>());
         dot = ( dot < -1.0f ? -1.0f : ( dot > 1.0f ? 1.0f : dot ) );
         float angle = pcl::rad2deg(acos(dot));
-
-        // Threshold to consider vPlanes[Q] a new valid floor
-        const float k_angle_threshold = 15; // degrees with respect to previous floor_normal
-        const float k_D_threshold = 0.08f; // Distance to camera with respect to previous D
 
         if ((angle < k_angle_threshold) and (fabs(fabs(vPlanes[Q].coeffs[3])-fabs(floor_normal_[3]))<=k_D_threshold)) {
             floor_normal_ = vPlanes[Q].coeffs;
@@ -185,19 +209,22 @@ void GlobalScene::findFloorFast(std::vector<Plane> vPlanes) {
 void GlobalScene::getManhattanDirections(CurrentScene &scene) {
     // Given current scene, compute Manhattan
 
-    if (new_floor_) {  // In findFloorFast has found a new floor, perform computation assuming known Y
-        std::cout << "Planes W Floor" << std::endl;
-        scene.getManhattanDirectionsFromPlanesWithFloor(f2c);
+    if (new_floor_ || initial_floor_) {  // In findFloorFast has found a new floor, or has been previously computed (and assumed to be more or less constant), perform computation assuming known Y
+        scene.getManhattanDirectionsFromPlanesWithFloor(f2c); // Using planes
+
+        if (scene.has_manhattan_ == false) {
+            scene.getManhattanDirectionsFromNormalsWithFloor(f2c,c2f); // If that didn't work, use normals
+        }
     }
+    else { // This functions compute a new Manhattan direction from scratch (without knowing floor), including thus floor_normal_
+        if (scene.has_manhattan_ == false) {
+            scene.getManhattanDirectionsFromPlanes();
 
-    if (scene.has_manhattan_ == false) { // if previous function did not work, just use planes
-        scene.getManhattanDirectionsFromPlanes();
-        std::cout << "Planes" << std::endl;
+            if (scene.has_manhattan_ == false){ // If still not enough information, use normals
+                scene.getManhattanDirectionsFromNormals();
+            }
 
-
-        if (scene.has_manhattan_ == false) // If still not enough information, use normals
-            std::cout << "Normals" << std::endl;
-            scene.getManhattanDirectionsFromNormals();
+        }
     }
 
     if (scene.has_manhattan_)  {

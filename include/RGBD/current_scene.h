@@ -42,7 +42,6 @@
 #include <pcl/sample_consensus/sac_model_normal_plane.h>
 #include <pcl/features/integral_image_normal.h>
 #include <pcl/sample_consensus/ransac.h>
-#include <pcl/segmentation/organized_multi_plane_segmentation.h>
 
 #include "RGBD/plane.h"
 
@@ -145,6 +144,11 @@ public:
     /// out: vPlanes.type
     void classifyPlanes();
 
+    //// Get Manhattan directions of the scene using normals assuming known floor: X sideways, Y vertical, Z front-back
+    /// in: f2c (floor to camera transformation matrix)
+    /// out: main_dir (3x3 Matrix with the directions X-Y-Z)
+    void getManhattanDirectionsFromNormalsWithFloor(Eigen::Affine3d f2c, Eigen::Affine3d c2f);
+
     //// Get Manhattan directions of the scene using normals: X sideways, Y vertical, Z front-back
     /// out: main_dir (3x3 Matrix with the directions X-Y-Z)
     void getManhattanDirectionsFromNormals();
@@ -165,7 +169,6 @@ public:
 
 
     // Variables
-
     pcl::PointCloud<pcl::PointXYZ>::Ptr fcloud; // Filtered point cloud
     pcl::PointCloud<pcl::Normal>::Ptr normals; // Normals point cloud
     pcl::search::Search<pcl::PointXYZ>::Ptr tree; // KdTree for fcloud
@@ -175,16 +178,6 @@ public:
     std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr > vObstacles2f; // Vector of non-planar pointcloud clusters at floor reference
     Eigen::Matrix3f main_dir; // Manhattan directions (X-Y-Z) by columns
     bool has_manhattan_; // True if Manhattan directions could be computed
-
-    //// Deprecated variables
-    //	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud; // Full cloud (deprecated)
-    //  pcl::PointCloud<pcl::PointXYZ>::Ptr floor;
-    //	Eigen::Vector4f viewpoint;
-    //	Eigen::Affine3d f2m;
-    //	Eigen::Matrix3f main_dir2f;
-
-    //	public:
-    //	  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
 #endif

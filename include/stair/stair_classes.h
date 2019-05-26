@@ -30,14 +30,14 @@
 
 #include "RGBD/plane.h"
 
-// Parameters for height of the stairs:
-const float k_height_threshold = 0.05f;
-const float k_height_min = 0.13f - k_height_threshold;
-const float k_height_max = 0.185f + k_height_threshold;
-const float k_length_threshold = 0.05f;
-const float k_length_min = 0.13f - k_length_threshold;
-const float k_sum_min = 0.54f - 2*k_height_threshold - k_length_threshold;
-const float k_sum_max = 0.70f + 2*k_height_threshold + k_length_threshold;
+// Parameters for height of the stairs, given by the regulations in our country (Spain):
+const float k_height_threshold = 0.04f;   // Around voxel grid value
+const float k_length_threshold = 0.06f;   // Some stairs in the dataset have lengths around 23cm, thus I had to increase the threshold to be safe
+const float k_height_min = 0.13f - k_height_threshold; // Min height is 13 cm
+const float k_height_max = 0.185f + k_height_threshold; // Max height is 18.5 cm
+const float k_length_min = 0.28f - k_length_threshold; // Min length is 28 cm (no max length)
+const float k_sum_min = 0.54f - 2*k_height_threshold - k_length_threshold; // Sum of two risers and the length of one step must sum more than 54 cm
+const float k_sum_max = 0.70f + 2*k_height_threshold + k_length_threshold; // Sum of two risers and the length of one step must sum less than 70 cm
 
 int neighbour_search(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, pcl::PointXYZ point, float radius, pcl::PointCloud<pcl::PointXYZ>::Ptr &neighbouring_cloud);
 int neighbour_search(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, pcl::PointXYZ point, float radius);
@@ -45,7 +45,11 @@ int neighbour_search(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, pcl::PointXYZ po
 class Stair {
   public:
 
-    Stair()	{}
+    Stair()	{
+        step_height = 0;
+        step_width = 0;
+        step_length = 0;
+    }
     ~Stair(){}
 	
     //// Chooses the best step (as a type Plane) from all the planes found as the one that produces greater extent from all candidates
