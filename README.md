@@ -133,7 +133,7 @@ Here we provide a dataset with some point clouds captured with a Kinect that inc
 The dataset was collected by the authors of the following paper. 
 - Titus Jia Jie Tang, Wen Lik Dennis Lui, Wai Ho Li. **Plane-Based Detection of Staircases Using Inverse Depth**. Australasian Conference on Robotics and Automation (ACRA), 2012.
 
-Please, cite this work if this dataset is used for academic purposes. From the provided images by these authors (RGB and Depth) we computed the point clouds and thus the .pcd files to be used as input in our method. [DOWNLOAD LINK (.zip, approx. 300mb)](https://drive.google.com/file/d/17KZMbjqmPRpfGGI4l5OGiO17QyANAuwh/view?usp=sharing)
+Please, cite this work if this dataset is used for academic purposes. From the provided images by these authors (RGB and Depth) we computed the point clouds and thus the .pcd files to be used as input in our method. [DOWNLOAD LINK (.zip, approx. 300mb)](https://unizares-my.sharepoint.com/:u:/g/personal/alperez_unizar_es/EQ2Ia6IfIspFnuoGOAWKMk8BffERCT3iWgzOmeQJx5GTlA?e=4mNHN3)
 
 To run a single point cloud, in a terminal:
 ```
@@ -162,7 +162,7 @@ rosrun stairs_detection stairs
 ```
 Notice that, in case you use another camera or the camera is publishing in other topic name you will have to change that in the code.
 
-We also provide a recorded sequence so you can test it without using an actual camera. Particularly, we provide a _rosbag_, which actually records the messages published in ROS and thus, by running the rosbag it is exactly the same as using a camera. [DOWNLOAD LINK (.bag, approx. 2gb)](https://drive.google.com/file/d/1e54Qqj3ToIeGIT8QS9G570cPLmGvo0vs/view?usp=sharing)
+We also provide a recorded sequence so you can test it without using an actual camera. Particularly, we provide a _rosbag_, which actually records the messages published in ROS and thus, by running the rosbag it is exactly the same as using a camera. [DOWNLOAD LINK (.bag, approx. 2gb)](https://unizares-my.sharepoint.com/:u:/g/personal/alperez_unizar_es/ETX-FBGbqS9LuXX29sQeqGMBpokbuI7QNeXPHdjbPX1a_w?e=iTbIJJ)
 
 The rosbag provided only contains RGB and depth images. In order to publish point clouds in `/camera/depth_registered/points`, you need to launch in a terminal:
 ```
